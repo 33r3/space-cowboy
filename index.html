@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Space Cowboy</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+      #game-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: crosshair;
+      }
+      #hud {
+        position: absolute;
+        top: 12px;
+        left: 12px;
+        color: #88aacc;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        pointer-events: none;
+        user-select: none;
+        line-height: 1.6;
+      }
+      #hud .key {
+        color: #556677;
+      }
+      #controls {
+        position: absolute;
+        bottom: 12px;
+        left: 12px;
+        color: #445566;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        pointer-events: none;
+        user-select: none;
+        line-height: 1.8;
+      }
+      #debug-toggle {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        background: rgba(0,20,40,0.7);
+        border: 1px solid #334;
+        color: #88aacc;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="game-canvas"></canvas>
+    <div id="hud">
+      <div><span class="key">pos</span> <span id="hud-pos">0, 0 Ly</span></div>
+      <div><span class="key">zoom</span> <span id="hud-zoom">1.00</span></div>
+      <div><span class="key">stars</span> <span id="hud-stars">0</span></div>
+      <div><span class="key">chunks</span> <span id="hud-chunks">0</span></div>
+      <div><span class="key">seed</span> <span id="hud-seed">42</span></div>
+    </div>
+    <div id="controls">
+      <div>drag — pan camera</div>
+      <div>scroll — zoom</div>
+      <div>click — move ship</div>
+      <div>D — toggle debug overlay</div>
+      <div>R — reset camera to ship</div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
