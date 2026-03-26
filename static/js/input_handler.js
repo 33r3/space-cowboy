@@ -123,6 +123,9 @@ export class InputHandler {
       if (e.key.toLowerCase() === 'r') {
         this.onCameraReset?.()
       }
+      if (e.key.toLowerCase() === 't') {
+        this.onRoutesToggle?.()
+      }
       if (e.key === 'Escape') {
         this.ship.clearWaypoints()
       }

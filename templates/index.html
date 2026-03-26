@@ -193,6 +193,150 @@
       }
       .cp-stockpile-label { color: #556677; }
       .cp-stockpile-value { color: #88aacc; }
+      /* ── Routes Panel ───────────────────────────────────────────────── */
+      #routes-panel {
+        display: none;
+        position: absolute;
+        top: 50%;
+        left: 16px;
+        transform: translateY(-50%);
+        background: rgba(6, 12, 22, 0.96);
+        border: 1px solid rgba(80, 120, 180, 0.4);
+        border-radius: 6px;
+        padding: 14px 16px;
+        color: #88aacc;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        width: 320px;
+        max-height: 90vh;
+        overflow-y: auto;
+        z-index: 100;
+      }
+      .rp-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        color: #aaccee;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+      }
+      #rp-close {
+        background: none; border: none; color: #445566;
+        font-size: 14px; cursor: pointer; padding: 0 2px;
+      }
+      #rp-close:hover { color: #aaccee; }
+      .rp-empty { color: #445566; font-size: 10px; padding: 4px 0 8px; }
+      .rp-route-entry {
+        border-top: 1px solid rgba(80, 120, 180, 0.15);
+        padding: 6px 0;
+      }
+      .rp-route-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 4px;
+      }
+      .rp-route-name { color: #aaccee; flex: 1; }
+      .rp-route-ship { color: #445566; font-size: 10px; }
+      .rp-cancel-btn {
+        background: none; border: none; color: #445566;
+        font-size: 12px; cursor: pointer; padding: 0 2px;
+      }
+      .rp-cancel-btn:hover { color: #cc4444; }
+      .rp-leg-progress { margin-bottom: 2px; }
+      .rp-leg-label { color: #556677; font-size: 10px; display: block; margin-bottom: 2px; }
+      .rp-progress-bar {
+        height: 3px; background: rgba(80,120,180,0.2);
+        border-radius: 2px; overflow: hidden;
+      }
+      .rp-progress-fill {
+        height: 100%; background: #4488cc;
+        border-radius: 2px; transition: width 0.5s;
+      }
+      #rp-new-btn {
+        margin-top: 10px; width: 100%;
+        background: rgba(30,60,100,0.6);
+        border: 1px solid rgba(60,120,200,0.4);
+        color: #66aadd; font-family: 'Courier New', monospace;
+        font-size: 11px; padding: 5px 10px;
+        border-radius: 3px; cursor: pointer;
+      }
+      #rp-new-btn:hover { background: rgba(50,90,140,0.7); }
+      /* Builder */
+      #rp-builder { margin-top: 10px; border-top: 1px solid rgba(80,120,180,0.2); padding-top: 10px; }
+      .rp-builder-label { color: #445566; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+      #rp-ship-select, #rp-name {
+        width: 100%; background: rgba(10,20,40,0.8);
+        border: 1px solid rgba(80,120,180,0.3); color: #88aacc;
+        font-family: 'Courier New', monospace; font-size: 11px;
+        padding: 4px 6px; border-radius: 3px; margin-bottom: 8px;
+      }
+      .rp-cost-label { color: #445566; font-size: 10px; margin-bottom: 2px; }
+      .rp-cost-label span { color: #88aacc; }
+      .rp-leg {
+        border: 1px solid rgba(80,120,180,0.2);
+        border-radius: 3px; padding: 6px 8px; margin-bottom: 6px;
+      }
+      .rp-leg-header {
+        color: #556677; font-size: 10px; margin-bottom: 4px;
+        display: flex; justify-content: space-between;
+      }
+      .rp-remove-leg {
+        background: none; border: none; color: #445566;
+        font-size: 10px; cursor: pointer; padding: 0;
+      }
+      .rp-remove-leg:hover { color: #cc4444; }
+      .rp-leg-from-to {
+        display: flex; align-items: center; gap: 4px; margin-bottom: 6px;
+      }
+      .rp-from-select, .rp-to-select {
+        flex: 1; background: rgba(10,20,40,0.8);
+        border: 1px solid rgba(80,120,180,0.3); color: #88aacc;
+        font-family: 'Courier New', monospace; font-size: 10px;
+        padding: 3px 4px; border-radius: 3px;
+      }
+      .rp-leg-from-to span { color: #334455; }
+      .rp-cargo-grid {
+        display: grid; grid-template-columns: 1fr 1fr;
+        gap: 2px 8px;
+      }
+      .rp-cargo-row {
+        display: flex; justify-content: space-between; align-items: center;
+        font-size: 10px;
+      }
+      .rp-cargo-row label { color: #556677; }
+      .rp-cargo-input {
+        width: 56px; background: rgba(10,20,40,0.8);
+        border: 1px solid rgba(80,120,180,0.2); color: #88aacc;
+        font-family: 'Courier New', monospace; font-size: 10px;
+        padding: 2px 4px; border-radius: 2px; text-align: right;
+      }
+      #rp-add-leg {
+        width: 100%; margin-bottom: 8px;
+        background: none; border: 1px dashed rgba(80,120,180,0.3);
+        color: #445566; font-family: 'Courier New', monospace;
+        font-size: 10px; padding: 4px; border-radius: 3px; cursor: pointer;
+      }
+      #rp-add-leg:hover { border-color: rgba(80,120,180,0.6); color: #88aacc; }
+      .rp-builder-actions { display: flex; gap: 6px; margin-top: 8px; }
+      #rp-submit {
+        flex: 1; background: rgba(30,80,50,0.7);
+        border: 1px solid rgba(60,160,100,0.4); color: #66cc88;
+        font-family: 'Courier New', monospace; font-size: 11px;
+        padding: 5px; border-radius: 3px; cursor: pointer;
+      }
+      #rp-submit:hover { background: rgba(50,110,70,0.8); }
+      #rp-submit:disabled { color: #445566; border-color: rgba(40,70,50,0.3); cursor: default; }
+      #rp-cancel {
+        background: rgba(30,40,60,0.6); border: 1px solid rgba(80,120,180,0.3);
+        color: #445566; font-family: 'Courier New', monospace;
+        font-size: 11px; padding: 5px 10px; border-radius: 3px; cursor: pointer;
+      }
+      #rp-cancel:hover { color: #88aacc; }
+      #rp-builder-error { color: #cc4444; font-size: 10px; margin-top: 4px; min-height: 14px; }
+      #rp-setup-cost { margin-bottom: 6px; }
+
       /* Found colony button */
       #colony-panel-found {
         width: 100%;
@@ -229,6 +373,7 @@
       <div>click — move ship / planet</div>
       <div>D — debug overlay</div>
       <div>R — reset camera</div>
+      <div>T — trade routes</div>
     </div>
 
     <div id="colony-panel">
@@ -288,6 +433,36 @@
       </div>
 
       <button id="colony-panel-found" style="display:none">Found Colony</button>
+    </div>
+
+    <!-- Routes panel -->
+    <div id="routes-panel">
+      <div class="rp-header">
+        <span>TRADE ROUTES</span>
+        <button id="rp-close">✕</button>
+      </div>
+
+      <div id="rp-route-list"></div>
+      <button id="rp-new-btn">+ New Route</button>
+
+      <div id="rp-builder" style="display:none">
+        <div class="rp-builder-label">Ship Class</div>
+        <select id="rp-ship-select"></select>
+        <div id="rp-setup-cost"></div>
+
+        <div class="rp-builder-label">Route Legs</div>
+        <div id="rp-legs"></div>
+        <button id="rp-add-leg">+ Add Leg</button>
+
+        <div class="rp-builder-label">Route Name</div>
+        <input id="rp-name" placeholder="e.g. Food Loop" />
+
+        <div id="rp-builder-error"></div>
+        <div class="rp-builder-actions">
+          <button id="rp-submit">Create Route</button>
+          <button id="rp-cancel">Cancel</button>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="/static/js/main.js"></script>

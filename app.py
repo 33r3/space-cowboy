@@ -2,6 +2,7 @@ import json
 import math
 import os
 from datetime import date, datetime, timezone
+from uuid import uuid4
 
 from flask import Flask, jsonify, request, render_template
 from generation.config import DEFAULT_CONFIG
@@ -16,6 +17,10 @@ from generation.colony_economics import (
     can_upgrade_dev, apply_upgrade_dev, size_name, dev_name, upgrade_cost,
     colonization_cost, colonization_range,
 )
+from generation.trade_routes import (
+    SHIP_CLASSES, available_ship_classes,
+    leg_distance, leg_transit_ticks, validate_route, tick_routes,
+)
 
 app = Flask(__name__)
 
@@ -24,6 +29,7 @@ density_field = DensityField(config)
 
 _DATA_DIR      = os.path.join(os.path.dirname(__file__), 'data')
 _COLONIES_FILE = os.path.join(_DATA_DIR, 'colonies.json')
+_ROUTES_FILE   = os.path.join(_DATA_DIR, 'routes.json')
 
 
 def _load_colonies() -> dict:
@@ -36,6 +42,19 @@ def _load_colonies() -> dict:
 def _save_colonies(data: dict) -> None:
     os.makedirs(_DATA_DIR, exist_ok=True)
     with open(_COLONIES_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
+
+
+def _load_routes() -> dict:
+    if os.path.exists(_ROUTES_FILE):
+        with open(_ROUTES_FILE) as f:
+            return json.load(f)
+    return {'routes': []}
+
+
+def _save_routes(data: dict) -> None:
+    os.makedirs(_DATA_DIR, exist_ok=True)
+    with open(_ROUTES_FILE, 'w') as f:
         json.dump(data, f, indent=2)
 
 
@@ -379,6 +398,178 @@ def api_colony_upgrade(planet_id: str):
     _save_colonies(data)
 
     return jsonify({'colony': _enrich_colony(colony, planet)})
+
+
+# ── Trade route helpers ────────────────────────────────────────────────────────
+
+def _enrich_route(route: dict, colonies_by_id: dict) -> dict:
+    """Add transit-progress fields for the current leg."""
+    route = dict(route)
+    ship  = SHIP_CLASSES.get(route['shipClass'], {})
+    route['shipName'] = ship.get('name', route['shipClass'])
+
+    legs    = route.get('legs', [])
+    leg_idx = route.get('currentLegIndex', 0)
+    if not legs:
+        return route
+
+    leg     = legs[leg_idx % len(legs)]
+    from_id = leg.get('fromPlanetId')
+    to_id   = leg.get('toPlanetId')
+
+    from_col = colonies_by_id.get(from_id)
+    to_col   = colonies_by_id.get(to_id)
+
+    dist          = leg_distance(from_col, to_col, config, density_field) if (from_col and to_col) else 0.0
+    transit_ticks = leg_transit_ticks(dist, route['shipClass']) if ship else 1
+
+    departed  = datetime.fromisoformat(route['legDepartedAt'].replace('Z', '+00:00'))
+    elapsed_s = (datetime.now(tz=timezone.utc) - departed).total_seconds()
+    elapsed_ticks = elapsed_s / max(1, transit_ticks * 60)
+
+    route['currentLeg'] = {
+        'fromName':     (colonies_by_id[from_id]['name'] if from_id in colonies_by_id else from_id),
+        'toName':       (colonies_by_id[to_id]['name']   if to_id   in colonies_by_id else to_id),
+        'distanceLy':   round(dist, 1),
+        'transitTicks': transit_ticks,
+        'elapsedTicks': round(elapsed_s / 60, 2),
+        'progressPct':  round(min(100.0, elapsed_ticks * 100), 1),
+    }
+    return route
+
+
+# ── Trade route endpoints ──────────────────────────────────────────────────────
+
+@app.route('/api/ships')
+def api_ships():
+    planet_id = request.args.get('planetId', '')
+    data      = _load_colonies()
+    col       = next((c for c in data['colonies'] if c['planetId'] == planet_id), None)
+    if col is None:
+        return jsonify({'error': 'colony not found'}), 404
+    return jsonify(available_ship_classes(col['developmentLevel']))
+
+
+@app.route('/api/routes', methods=['GET'])
+def api_routes_get():
+    routes_data  = _load_routes()
+    colonies_data = _load_colonies()
+
+    # Apply ticks to routes (lazy advance)
+    routes_data, colonies_data, changed = tick_routes(
+        routes_data, colonies_data, config, density_field
+    )
+    if changed:
+        _save_routes(routes_data)
+        _save_colonies(colonies_data)
+
+    colonies_by_id = {c['planetId']: c for c in colonies_data['colonies']}
+    enriched = [_enrich_route(r, colonies_by_id) for r in routes_data['routes']]
+    return jsonify({'routes': enriched})
+
+
+@app.route('/api/routes', methods=['POST'])
+def api_routes_post():
+    body = request.get_json(force=True) or {}
+    name        = body.get('name', 'Unnamed Route')
+    ship_class  = body.get('shipClass', '')
+    legs        = body.get('legs', [])
+
+    if ship_class not in SHIP_CLASSES:
+        return jsonify({'error': f'unknown ship class: {ship_class}'}), 400
+
+    ship = SHIP_CLASSES[ship_class]
+
+    colonies_data  = _load_colonies()
+    colonies_by_id = {c['planetId']: c for c in colonies_data['colonies']}
+
+    # Source colony = first leg's fromPlanetId
+    if not legs:
+        return jsonify({'error': 'route must have at least one leg'}), 400
+
+    source_id  = legs[0].get('fromPlanetId')
+    source_col = colonies_by_id.get(source_id)
+    if source_col is None:
+        return jsonify({'error': f'source colony {source_id!r} not found'}), 404
+
+    # Dev gate
+    if source_col['developmentLevel'] < ship['devRequired']:
+        return jsonify({
+            'error': f'{ship["name"]} requires dev level {ship["devRequired"]}; '
+                     f'source colony is dev {source_col["developmentLevel"]}'
+        }), 403
+
+    # Validate legs
+    ok, reason = validate_route(legs, ship_class, colonies_by_id, config, density_field)
+    if not ok:
+        return jsonify({'error': reason}), 400
+
+    # Check setup cost
+    setup_cost = ship['setupCost']
+    for resource, amount in setup_cost.items():
+        if source_col['stockpiles'].get(resource, 0.0) < amount:
+            return jsonify({
+                'error': f'insufficient {resource} for setup cost '
+                         f'(need {amount}, have {source_col["stockpiles"].get(resource, 0.0):.1f})'
+            }), 400
+
+    # Check first leg cargo
+    first_cargo = legs[0].get('cargo', {})
+    for resource, amount in first_cargo.items():
+        available = source_col['stockpiles'].get(resource, 0.0)
+        # After setup cost
+        after_setup = available - setup_cost.get(resource, 0.0)
+        if after_setup < amount:
+            return jsonify({
+                'error': f'insufficient {resource} for first leg cargo '
+                         f'(need {amount} after setup, have {after_setup:.1f})'
+            }), 400
+
+    # Deduct setup cost from source
+    for resource, amount in setup_cost.items():
+        source_col['stockpiles'][resource] = round(
+            source_col['stockpiles'].get(resource, 0.0) - amount, 3
+        )
+
+    # Deduct first leg cargo from source
+    for resource, amount in first_cargo.items():
+        source_col['stockpiles'][resource] = round(
+            source_col['stockpiles'].get(resource, 0.0) - amount, 3
+        )
+
+    # Write updated source colony back
+    colonies_data['colonies'] = [
+        source_col if c['planetId'] == source_id else c
+        for c in colonies_data['colonies']
+    ]
+    _save_colonies(colonies_data)
+
+    # Create route
+    route = {
+        'routeId':         uuid4().hex[:8],
+        'name':            name,
+        'shipClass':       ship_class,
+        'legs':            legs,
+        'status':          'active',
+        'currentLegIndex': 0,
+        'legDepartedAt':   datetime.now(tz=timezone.utc).isoformat(),
+    }
+    routes_data = _load_routes()
+    routes_data['routes'].append(route)
+    _save_routes(routes_data)
+
+    return jsonify({'route': route}), 201
+
+
+@app.route('/api/routes/<route_id>', methods=['DELETE'])
+def api_routes_delete(route_id: str):
+    routes_data = _load_routes()
+    before = len(routes_data['routes'])
+    routes_data['routes'] = [r for r in routes_data['routes'] if r['routeId'] != route_id]
+    if len(routes_data['routes']) == before:
+        return jsonify({'error': 'route not found'}), 404
+    _save_routes(routes_data)
+    return jsonify({'ok': True})
 
 
 if __name__ == '__main__':

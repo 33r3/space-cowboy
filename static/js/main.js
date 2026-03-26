@@ -6,6 +6,7 @@ import { ExplorationTracker } from './exploration_tracker.js'
 import { InputHandler } from './input_handler.js'
 import { Renderer } from './renderer.js'
 import { ColonyManager } from './colony_manager.js'
+import { RouteManager } from './route_manager.js'
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
@@ -41,13 +42,25 @@ colonyManager.init().then(() => {
   }
 })
 
+// ── Route manager ─────────────────────────────────────────────────────────────
+
+const routeManager = new RouteManager()
+routeManager.init()
+
 // ── Renderer & input ──────────────────────────────────────────────────────────
 
 const renderer = new Renderer(ctx, camera, galaxyClient, colonyManager)
 const input    = new InputHandler(canvas, camera, ship, viewport)
 
-input.onDebugToggle = () => { renderer.showDebug = !renderer.showDebug }
-input.onCameraReset = () => { camera.worldX = ship.worldX; camera.worldY = ship.worldY }
+input.onDebugToggle  = () => { renderer.showDebug = !renderer.showDebug }
+input.onCameraReset  = () => { camera.worldX = ship.worldX; camera.worldY = ship.worldY }
+input.onRoutesToggle = () => {
+  if (routesPanel?.style.display === 'none' || !routesPanel?.style.display) {
+    openRoutesPanel()
+  } else {
+    closeRoutesPanel()
+  }
+}
 
 // ── Colony panel ──────────────────────────────────────────────────────────────
 
@@ -316,6 +329,258 @@ cpUpgradeBtn.addEventListener('click', async () => {
     cpStatus.innerHTML = `<span style="color:#cc4444;font-size:10px">${err.message}</span>`
   }
 })
+
+// ── Routes panel ──────────────────────────────────────────────────────────────
+
+const routesPanel    = document.getElementById('routes-panel')
+const rpClose        = document.getElementById('rp-close')
+const rpRouteList    = document.getElementById('rp-route-list')
+const rpNewBtn       = document.getElementById('rp-new-btn')
+const rpBuilder      = document.getElementById('rp-builder')
+const rpShipSelect   = document.getElementById('rp-ship-select')
+const rpLegsDiv      = document.getElementById('rp-legs')
+const rpAddLeg       = document.getElementById('rp-add-leg')
+const rpNameInput    = document.getElementById('rp-name')
+const rpSetupCost    = document.getElementById('rp-setup-cost')
+const rpBuilderError = document.getElementById('rp-builder-error')
+const rpSubmit       = document.getElementById('rp-submit')
+const rpCancel       = document.getElementById('rp-cancel')
+
+const ALL_RESOURCES = [
+  'food', 'water', 'organicFuels', 'chemFeedstocks',
+  'minerals', 'fusionFuel', 'metals', 'radioactives',
+]
+
+function _renderRouteList() {
+  const routes = routeManager.routes
+  if (!routes.length) {
+    rpRouteList.innerHTML = '<div class="rp-empty">No trade routes. Click + New Route to begin.</div>'
+    return
+  }
+  rpRouteList.innerHTML = routes.map(r => {
+    const leg = r.currentLeg
+    const pct = leg?.progressPct ?? 0
+    const legText = leg
+      ? `${leg.fromName} → ${leg.toName} (${pct.toFixed(0)}%)`
+      : ''
+    return `<div class="rp-route-entry" data-id="${r.routeId}">
+      <div class="rp-route-header">
+        <span class="rp-route-name">${r.name}</span>
+        <span class="rp-route-ship">${r.shipName ?? r.shipClass}</span>
+        <button class="rp-cancel-btn" data-id="${r.routeId}">✕</button>
+      </div>
+      ${leg ? `<div class="rp-leg-progress">
+        <span class="rp-leg-label">${legText}</span>
+        <div class="rp-progress-bar">
+          <div class="rp-progress-fill" style="width:${pct}%"></div>
+        </div>
+      </div>` : ''}
+    </div>`
+  }).join('')
+
+  rpRouteList.querySelectorAll('.rp-cancel-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      const id = btn.dataset.id
+      try {
+        await routeManager.deleteRoute(id)
+        _renderRouteList()
+      } catch (err) {
+        console.error('Delete route failed:', err.message)
+      }
+    })
+  })
+}
+
+routeManager.onUpdate = () => {
+  if (routesPanel && routesPanel.style.display !== 'none') {
+    _renderRouteList()
+  }
+}
+
+// ── Route builder ──────────────────────────────────────────────────────────────
+
+let _builderShips   = []
+let _builderLegs    = []   // [{ fromId, toId, cargo }]
+
+function _getColonyOptions() {
+  return colonyManager.colonies.map(c =>
+    `<option value="${c.planetId}">${c.name}</option>`
+  ).join('')
+}
+
+function _updateSetupCostDisplay() {
+  const shipId = rpShipSelect.value
+  const ship   = _builderShips.find(s => s.id === shipId)
+  if (!ship) { rpSetupCost.innerHTML = ''; return }
+  const costParts = Object.entries(ship.setupCost ?? {})
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => `${v} ${RES_LABELS[k] ?? k}`)
+    .join(' · ')
+  rpSetupCost.innerHTML =
+    `<div class="rp-cost-label">Setup cost: <span>${costParts || 'free'}</span></div>` +
+    `<div class="rp-cost-label">Capacity: <span>${ship.capacity} units · ` +
+    `${ship.maxRangeLy} Ly max range · ${ship.speedLyPerTick} Ly/tick</span></div>`
+}
+
+function _renderBuilderLegs() {
+  const colonyOptions = _getColonyOptions()
+  rpLegsDiv.innerHTML = _builderLegs.map((leg, i) => {
+    const cargoRows = ALL_RESOURCES.map(res => {
+      const val = leg.cargo[res] ?? 0
+      return `<div class="rp-cargo-row">
+        <label>${RES_LABELS[res] ?? res}</label>
+        <input type="number" min="0" step="1" value="${val}"
+          data-leg="${i}" data-res="${res}" class="rp-cargo-input">
+      </div>`
+    }).join('')
+
+    return `<div class="rp-leg">
+      <div class="rp-leg-header">Leg ${i + 1}
+        ${_builderLegs.length > 1 ? `<button class="rp-remove-leg" data-idx="${i}">remove</button>` : ''}
+      </div>
+      <div class="rp-leg-from-to">
+        <select class="rp-from-select" data-idx="${i}">${colonyOptions}</select>
+        <span>→</span>
+        <select class="rp-to-select" data-idx="${i}">${colonyOptions}</select>
+      </div>
+      <div class="rp-cargo-grid">${cargoRows}</div>
+    </div>`
+  }).join('')
+
+  // Restore selections
+  rpLegsDiv.querySelectorAll('.rp-from-select').forEach(sel => {
+    const idx = parseInt(sel.dataset.idx)
+    if (_builderLegs[idx]?.fromId) sel.value = _builderLegs[idx].fromId
+  })
+  rpLegsDiv.querySelectorAll('.rp-to-select').forEach(sel => {
+    const idx = parseInt(sel.dataset.idx)
+    if (_builderLegs[idx]?.toId) sel.value = _builderLegs[idx].toId
+  })
+
+  rpLegsDiv.querySelectorAll('.rp-from-select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      _builderLegs[parseInt(sel.dataset.idx)].fromId = sel.value
+    })
+  })
+  rpLegsDiv.querySelectorAll('.rp-to-select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      _builderLegs[parseInt(sel.dataset.idx)].toId = sel.value
+    })
+  })
+  rpLegsDiv.querySelectorAll('.rp-cargo-input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const legIdx = parseInt(inp.dataset.leg)
+      const res    = inp.dataset.res
+      _builderLegs[legIdx].cargo[res] = Math.max(0, parseFloat(inp.value) || 0)
+    })
+  })
+  rpLegsDiv.querySelectorAll('.rp-remove-leg').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _builderLegs.splice(parseInt(btn.dataset.idx), 1)
+      _renderBuilderLegs()
+    })
+  })
+}
+
+async function _openBuilder() {
+  rpBuilder.style.display = 'block'
+  rpNewBtn.style.display  = 'none'
+  rpBuilderError.textContent = ''
+
+  const colonies = colonyManager.colonies
+  if (!colonies.length) {
+    rpBuilderError.textContent = 'No colonies available.'
+    return
+  }
+
+  // Load ships available from first colony
+  try {
+    _builderShips = await routeManager.getShipsForColony(colonies[0].planetId)
+  } catch {
+    _builderShips = []
+  }
+
+  rpShipSelect.innerHTML = _builderShips.map(s =>
+    `<option value="${s.id}">${s.name} (dev ${s.devRequired}+, cap ${s.capacity})</option>`
+  ).join('')
+
+  _builderLegs = [{
+    fromId: colonies[0]?.planetId ?? '',
+    toId:   colonies[1]?.planetId ?? colonies[0]?.planetId ?? '',
+    cargo:  {},
+  }]
+
+  _updateSetupCostDisplay()
+  _renderBuilderLegs()
+}
+
+function _closeBuilder() {
+  rpBuilder.style.display = 'none'
+  rpNewBtn.style.display  = 'block'
+  rpBuilderError.textContent = ''
+}
+
+rpShipSelect?.addEventListener('change', _updateSetupCostDisplay)
+
+rpAddLeg?.addEventListener('click', () => {
+  const colonies = colonyManager.colonies
+  _builderLegs.push({
+    fromId: colonies[0]?.planetId ?? '',
+    toId:   colonies[1]?.planetId ?? colonies[0]?.planetId ?? '',
+    cargo:  {},
+  })
+  _renderBuilderLegs()
+})
+
+rpSubmit?.addEventListener('click', async () => {
+  rpBuilderError.textContent = ''
+  rpSubmit.disabled = true
+
+  const name      = rpNameInput?.value.trim() || 'Trade Route'
+  const shipClass = rpShipSelect?.value
+
+  const legs = _builderLegs.map((leg, i) => {
+    const fromSel = rpLegsDiv.querySelector(`.rp-from-select[data-idx="${i}"]`)
+    const toSel   = rpLegsDiv.querySelector(`.rp-to-select[data-idx="${i}"]`)
+    const cargo   = {}
+    rpLegsDiv.querySelectorAll(`.rp-cargo-input[data-leg="${i}"]`).forEach(inp => {
+      const v = parseFloat(inp.value) || 0
+      if (v > 0) cargo[inp.dataset.res] = v
+    })
+    return {
+      fromPlanetId: fromSel?.value ?? leg.fromId,
+      toPlanetId:   toSel?.value   ?? leg.toId,
+      cargo,
+    }
+  })
+
+  try {
+    await routeManager.createRoute({ name, shipClass, legs })
+    _closeBuilder()
+    _renderRouteList()
+  } catch (err) {
+    rpBuilderError.textContent = err.message
+    rpSubmit.disabled = false
+  }
+})
+
+rpCancel?.addEventListener('click', _closeBuilder)
+
+function openRoutesPanel() {
+  if (!routesPanel) return
+  _renderRouteList()
+  routesPanel.style.display = 'block'
+}
+
+function closeRoutesPanel() {
+  if (!routesPanel) return
+  routesPanel.style.display = 'none'
+  _closeBuilder()
+}
+
+rpClose?.addEventListener('click', closeRoutesPanel)
+rpNewBtn?.addEventListener('click', _openBuilder)
 
 // ── Mouse tracking ────────────────────────────────────────────────────────────
 
