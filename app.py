@@ -79,6 +79,20 @@ def _star_position(colony: dict) -> tuple[float, float] | None:
     return (star['worldX'], star['worldY']) if star else None
 
 
+def _planet_world_pos(planet_id: str) -> tuple[float | None, float | None]:
+    """Return (worldX, worldY) of a planet from its ID string 'cx,cy:starIndex:planetIndex'."""
+    try:
+        parts = planet_id.split(':')
+        cx, cy = map(int, parts[0].split(','))
+        star_index = int(parts[1])
+        _, planet = _get_planet(cx, cy, star_index, planet_id)
+        if planet:
+            return planet.get('worldX'), planet.get('worldY')
+    except (ValueError, IndexError, AttributeError):
+        pass
+    return None, None
+
+
 def _find_source_colony(data: dict, target_x: float, target_y: float):
     """Return (colony_dict, distance_ly) of the nearest dev-3+ colony within range, or None."""
     best_col, best_dist = None, float('inf')
@@ -491,6 +505,9 @@ def _enrich_route(route: dict, colonies_by_id: dict) -> dict:
     elapsed_s = (datetime.now(tz=timezone.utc) - departed).total_seconds()
     elapsed_ticks = elapsed_s / max(1, transit_ticks * 60)
 
+    from_wx, from_wy = _planet_world_pos(from_id) if from_id else (None, None)
+    to_wx, to_wy     = _planet_world_pos(to_id)   if to_id   else (None, None)
+
     route['currentLeg'] = {
         'fromName':     (colonies_by_id[from_id]['name'] if from_id in colonies_by_id else from_id),
         'toName':       (colonies_by_id[to_id]['name']   if to_id   in colonies_by_id else to_id),
@@ -498,6 +515,8 @@ def _enrich_route(route: dict, colonies_by_id: dict) -> dict:
         'transitTicks': transit_ticks,
         'elapsedTicks': round(elapsed_s / 60, 2),
         'progressPct':  round(min(100.0, elapsed_ticks * 100), 1),
+        'fromWorldX': from_wx, 'fromWorldY': from_wy,
+        'toWorldX':   to_wx,   'toWorldY':   to_wy,
     }
     return route
 

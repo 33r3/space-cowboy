@@ -49,7 +49,7 @@ routeManager.init()
 
 // ── Renderer & input ──────────────────────────────────────────────────────────
 
-const renderer = new Renderer(ctx, camera, galaxyClient, colonyManager)
+const renderer = new Renderer(ctx, camera, galaxyClient, colonyManager, routeManager)
 const input    = new InputHandler(canvas, camera, ship, viewport)
 
 input.onDebugToggle  = () => { renderer.showDebug = !renderer.showDebug }

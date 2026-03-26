@@ -5,10 +5,11 @@ import { SystemRenderer } from './system_renderer.js'
 const SYSTEM_ZOOM_THRESHOLD = 1.5
 
 export class Renderer {
-  constructor(ctx, camera, galaxyClient, colonyManager = null) {
+  constructor(ctx, camera, galaxyClient, colonyManager = null, routeManager = null) {
     this.ctx          = ctx
     this.camera       = camera
     this.galaxyClient = galaxyClient
+    this._routeManager = routeManager
 
     this._starRenderer   = new StarRenderer(ctx)
     this._debugRenderer  = new ChunkDebugRenderer(ctx)
@@ -61,6 +62,9 @@ export class Renderer {
 
     // ── Waypoints ─────────────────────────────────────────────────────────────
     this._renderWaypoints(ship, canvasW, canvasH)
+
+    // ── Transit ships ─────────────────────────────────────────────────────────
+    this._renderTransitShips(canvasW, canvasH)
 
     // ── Tooltip ───────────────────────────────────────────────────────────────
     if (this._hoveredPlanet) {
@@ -157,5 +161,86 @@ export class Renderer {
       ctx.lineWidth   = 1.2
       ctx.stroke()
     }
+  }
+
+  _renderTransitShips(canvasW, canvasH) {
+    if (this.camera.zoom < 0.02) return
+
+    // ── Colony ships ─────────────────────────────────────────────────────────
+    const colonies = this._systemRenderer.colonyManager?.colonies ?? []
+    for (const col of colonies) {
+      if (col.status !== 'in_transit') continue
+      const srcCol = this._systemRenderer.colonyManager?.getColony(col.sourcePlanetId)
+      if (!srcCol?.planet || !col.planet) continue
+
+      const t   = (col.transitProgressPct ?? 0) / 100
+      const wx  = srcCol.planet.worldX + (col.planet.worldX - srcCol.planet.worldX) * t
+      const wy  = srcCol.planet.worldY + (col.planet.worldY - srcCol.planet.worldY) * t
+      const hdg = Math.atan2(
+        col.planet.worldY - srcCol.planet.worldY,
+        col.planet.worldX - srcCol.planet.worldX,
+      ) + Math.PI / 2
+
+      const { sx: x1, sy: y1 } = this.camera.worldToScreen(srcCol.planet.worldX, srcCol.planet.worldY, canvasW, canvasH)
+      const { sx: x2, sy: y2 } = this.camera.worldToScreen(col.planet.worldX,    col.planet.worldY,    canvasW, canvasH)
+      const { sx,     sy     } = this.camera.worldToScreen(wx, wy, canvasW, canvasH)
+
+      this._drawTransitLine(x1, y1, x2, y2, 'rgba(255,170,68,0.12)')
+      this._drawShipSprite(sx, sy, hdg, '#ffaa44', '#ffcc88')
+    }
+
+    // ── Trade route ships ─────────────────────────────────────────────────────
+    const routes = this._routeManager?.routes ?? []
+    for (const route of routes) {
+      if (route.status === 'paused') continue
+      const leg = route.currentLeg
+      if (!leg || leg.fromWorldX == null || leg.toWorldX == null) continue
+
+      const t   = (leg.progressPct ?? 0) / 100
+      const wx  = leg.fromWorldX + (leg.toWorldX - leg.fromWorldX) * t
+      const wy  = leg.fromWorldY + (leg.toWorldY - leg.fromWorldY) * t
+      const hdg = Math.atan2(
+        leg.toWorldY - leg.fromWorldY,
+        leg.toWorldX - leg.fromWorldX,
+      ) + Math.PI / 2
+
+      const { sx: x1, sy: y1 } = this.camera.worldToScreen(leg.fromWorldX, leg.fromWorldY, canvasW, canvasH)
+      const { sx: x2, sy: y2 } = this.camera.worldToScreen(leg.toWorldX,   leg.toWorldY,   canvasW, canvasH)
+      const { sx,     sy     } = this.camera.worldToScreen(wx, wy, canvasW, canvasH)
+
+      this._drawTransitLine(x1, y1, x2, y2, 'rgba(136,204,255,0.10)')
+      this._drawShipSprite(sx, sy, hdg, '#88ccff', '#aaddff')
+    }
+  }
+
+  _drawTransitLine(x1, y1, x2, y2, color) {
+    const ctx = this.ctx
+    ctx.beginPath()
+    ctx.moveTo(x1, y1)
+    ctx.lineTo(x2, y2)
+    ctx.strokeStyle = color
+    ctx.lineWidth   = 0.8
+    ctx.setLineDash([3, 5])
+    ctx.stroke()
+    ctx.setLineDash([])
+  }
+
+  _drawShipSprite(sx, sy, heading, fill, stroke, size = 5) {
+    const ctx = this.ctx
+    ctx.save()
+    ctx.translate(sx, sy)
+    ctx.rotate(heading)
+    ctx.beginPath()
+    ctx.moveTo(0,            -size)
+    ctx.lineTo( size * 0.55,  size * 0.7)
+    ctx.lineTo(0,              size * 0.3)
+    ctx.lineTo(-size * 0.55,  size * 0.7)
+    ctx.closePath()
+    ctx.fillStyle   = fill
+    ctx.fill()
+    ctx.strokeStyle = stroke
+    ctx.lineWidth   = 0.7
+    ctx.stroke()
+    ctx.restore()
   }
 }
