@@ -178,14 +178,13 @@ def apply_ticks(colony: dict, planet_yields: dict, n_ticks: int) -> dict:
             if v > 0:
                 stockpiles[k] = max(0.0, round(stockpiles.get(k, 0.0) - v, 3))
 
-        # Starvation tracking and demotion (homeworld is immune)
+        # Starvation tracking and demotion (homeworld cannot be abandoned)
         if starving:
             colony['starvationTicks'] = colony.get('starvationTicks', 0) + 1
         else:
             colony['starvationTicks'] = 0
 
-        if (colony['starvationTicks'] >= STARVE_TICKS_NEEDED
-                and not colony.get('isHomeworld', False)):
+        if colony['starvationTicks'] >= STARVE_TICKS_NEEDED:
             dev = colony['developmentLevel']
             colony['starvationTicks'] = 0
             if dev > 1:
@@ -193,9 +192,10 @@ def apply_ticks(colony: dict, planet_yields: dict, n_ticks: int) -> dict:
                 # Recalculate rates for demoted dev level
                 ext = extraction_per_tick(colony, planet_yields)
                 con = consumption_per_tick(colony)
-            else:
+            elif not colony.get('isHomeworld', False):
                 colony['status'] = 'abandoned'
                 break
+            # else: homeworld at dev 1 — starvation resets, no abandonment
 
         # Growth progress
         if food_ok and water_ok:
