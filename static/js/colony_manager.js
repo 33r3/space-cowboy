@@ -1,16 +1,21 @@
 /**
  * ColonyManager — fetches and maintains homeworld + colony state.
  * Communicates with /api/homeworld and /api/colonies.
+ * Polls /api/colonies every 30 seconds to pick up tick-advanced state.
  */
 export class ColonyManager {
   #homeworldData = null   // full API response (planet, star, cx, cy, starIndex)
   #colonyIds     = new Set()
   #colonies      = []     // enriched colony records from server
   #ready         = false
+  #onUpdate      = null   // callback fired after each poll refresh
+  #pollInterval  = null
 
   async init() {
     await Promise.all([this.#fetchHomeworld(), this.#fetchColonies()])
     this.#ready = true
+    // Poll every 30 seconds so UI reflects auto-ticked stockpiles
+    this.#pollInterval = setInterval(() => this.#fetchColonies(), 30_000)
   }
 
   // ── Accessors ──────────────────────────────────────────────────────────────
@@ -19,12 +24,20 @@ export class ColonyManager {
   get homeworld()  { return this.#homeworldData }
   get colonies()   { return this.#colonies }
 
+  /** Called after each background poll — use to refresh open colony panel. */
+  set onUpdate(fn) { this.#onUpdate = fn }
+
   isHomeworld(planetId) {
     return this.#homeworldData?.planet?.id === planetId
   }
 
   isColony(planetId) {
     return this.#colonyIds.has(planetId)
+  }
+
+  /** Return the enriched colony record for a planet, or null. */
+  getColony(planetId) {
+    return this.#colonies.find(c => c.planetId === planetId) ?? null
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -42,9 +55,24 @@ export class ColonyManager {
     })
     const data = await resp.json()
     if (!resp.ok) throw new Error(data.error ?? 'Failed to found colony')
-    this.#colonyIds.add(planet.id)
-    this.#colonies.push({ ...data.colony, planet: data.planet })
-    return data.colony
+    // Refresh full list so economics fields are populated
+    await this.#fetchColonies()
+    return this.getColony(planet.id)
+  }
+
+  /**
+   * Upgrade development level of a colony.
+   * Returns updated enriched colony record, or throws on error.
+   */
+  async upgradeColony(planetId) {
+    const encoded = encodeURIComponent(planetId)
+    const resp = await fetch(`/api/colonies/${encoded}/upgrade`, { method: 'POST' })
+    const data = await resp.json()
+    if (!resp.ok) throw new Error(data.error ?? 'Upgrade failed')
+    // Replace in local cache
+    const updated = data.colony
+    this.#colonies = this.#colonies.map(c => c.planetId === planetId ? updated : c)
+    return updated
   }
 
   // ── Private fetch helpers ──────────────────────────────────────────────────
@@ -59,8 +87,9 @@ export class ColonyManager {
   async #fetchColonies() {
     try {
       const data = await fetch('/api/colonies').then(r => r.json())
-      this.#colonies = data.colonies ?? []
+      this.#colonies  = data.colonies ?? []
       this.#colonyIds = new Set(this.#colonies.map(c => c.planetId))
+      this.#onUpdate?.()
     } catch { /* ignore */ }
   }
 }

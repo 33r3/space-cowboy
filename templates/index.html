@@ -47,74 +47,169 @@
         user-select: none;
         line-height: 1.8;
       }
+
+      /* ── Colony Panel ──────────────────────────────────────────────────── */
       #colony-panel {
         display: none;
         position: absolute;
         top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
+        right: 16px;
+        transform: translateY(-50%);
         background: rgba(6, 12, 22, 0.96);
         border: 1px solid rgba(80, 120, 180, 0.5);
         border-radius: 6px;
-        padding: 18px 22px;
+        padding: 16px 18px;
         color: #88aacc;
         font-family: 'Courier New', monospace;
-        font-size: 12px;
-        min-width: 260px;
-        max-width: 320px;
+        font-size: 11px;
+        width: 300px;
+        max-height: 90vh;
+        overflow-y: auto;
         z-index: 100;
+      }
+      .cp-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 2px;
       }
       #colony-panel-title {
         color: #aaccee;
+        font-size: 13px;
+        font-weight: bold;
+      }
+      #colony-panel-close-btn {
+        background: none;
+        border: none;
+        color: #445566;
         font-size: 14px;
-        margin-bottom: 4px;
+        cursor: pointer;
+        padding: 0 2px;
+        line-height: 1;
       }
+      #colony-panel-close-btn:hover { color: #aaccee; }
       #colony-panel-subtitle {
-        color: #556677;
-        font-size: 11px;
-        margin-bottom: 12px;
+        color: #445566;
+        font-size: 10px;
+        margin-bottom: 10px;
       }
-      #colony-panel-status {
-        margin-bottom: 12px;
-        font-size: 11px;
-        line-height: 1.7;
+      .cp-divider {
+        border: none;
+        border-top: 1px solid rgba(80, 120, 180, 0.2);
+        margin: 10px 0;
       }
-      #colony-panel-yields {
-        margin-bottom: 14px;
-        font-size: 11px;
-        line-height: 1.8;
-        color: #88aacc;
+      .cp-section-label {
+        color: #445566;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 6px;
       }
-      #colony-panel-yields .yields-header {
-        color: #6699bb;
+      /* Size + growth */
+      .cp-size-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
         margin-bottom: 4px;
       }
-      .colony-panel-buttons {
-        display: flex;
-        gap: 8px;
+      .cp-size-name { color: #88aacc; }
+      .cp-progress-bar {
+        flex: 1;
+        height: 4px;
+        background: rgba(80, 120, 180, 0.2);
+        border-radius: 2px;
+        overflow: hidden;
       }
-      .colony-panel-buttons button {
-        background: rgba(40, 70, 110, 0.7);
-        border: 1px solid rgba(80, 130, 190, 0.5);
+      .cp-progress-fill {
+        height: 100%;
+        background: #44cc88;
+        border-radius: 2px;
+        transition: width 0.3s;
+      }
+      .cp-progress-label { color: #445566; font-size: 10px; }
+      /* Dev level */
+      .cp-dev-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+      .cp-dev-name { color: #88aacc; }
+      #colony-panel-upgrade-btn {
+        background: rgba(40, 80, 60, 0.7);
+        border: 1px solid rgba(60, 160, 100, 0.5);
+        color: #66cc88;
+        font-family: 'Courier New', monospace;
+        font-size: 10px;
+        padding: 3px 8px;
+        border-radius: 3px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      #colony-panel-upgrade-btn:hover { background: rgba(60, 110, 80, 0.8); }
+      #colony-panel-upgrade-btn:disabled {
+        color: #445566;
+        border-color: rgba(40, 70, 60, 0.3);
+        cursor: default;
+      }
+      .cp-upgrade-cost {
+        color: #445566;
+        font-size: 10px;
+        margin-bottom: 2px;
+        padding-left: 2px;
+      }
+      /* Resource flow table */
+      .cp-flows-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10px;
+      }
+      .cp-flows-table th {
+        color: #445566;
+        font-weight: normal;
+        text-align: right;
+        padding: 0 4px 4px 0;
+      }
+      .cp-flows-table th:first-child { text-align: left; }
+      .cp-flows-table td {
+        text-align: right;
+        padding: 1px 4px 1px 0;
         color: #88aacc;
+      }
+      .cp-flows-table td:first-child { text-align: left; color: #667788; }
+      .net-pos { color: #44cc88; }
+      .net-neg { color: #cc4444; }
+      .net-zero { color: #445566; }
+      /* Stockpiles */
+      .cp-stockpile-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2px 12px;
+        font-size: 10px;
+      }
+      .cp-stockpile-entry {
+        display: flex;
+        justify-content: space-between;
+      }
+      .cp-stockpile-label { color: #556677; }
+      .cp-stockpile-value { color: #88aacc; }
+      /* Found colony button */
+      #colony-panel-found {
+        width: 100%;
+        margin-top: 10px;
+        background: rgba(40, 70, 110, 0.7);
+        border: 1px solid rgba(60, 160, 100, 0.5);
+        color: #66cc88;
         font-family: 'Courier New', monospace;
         font-size: 11px;
-        padding: 5px 12px;
+        padding: 6px 12px;
         border-radius: 3px;
         cursor: pointer;
       }
-      .colony-panel-buttons button:hover {
-        background: rgba(60, 100, 150, 0.8);
-        color: #aaccee;
-      }
-      #colony-panel-found {
-        flex: 1;
-        color: #66cc88 !important;
-        border-color: rgba(60, 160, 100, 0.5) !important;
-      }
+      #colony-panel-found:hover { background: rgba(60, 100, 80, 0.8); }
       #colony-panel-found:disabled {
-        color: #445566 !important;
-        border-color: rgba(40, 70, 60, 0.4) !important;
+        color: #445566;
+        border-color: rgba(40, 70, 60, 0.3);
         cursor: default;
       }
     </style>
@@ -131,20 +226,70 @@
     <div id="controls">
       <div>drag — pan camera</div>
       <div>scroll — zoom</div>
-      <div>click — move ship</div>
-      <div>D — toggle debug overlay</div>
-      <div>R — reset camera to ship</div>
+      <div>click — move ship / planet</div>
+      <div>D — debug overlay</div>
+      <div>R — reset camera</div>
     </div>
+
     <div id="colony-panel">
-      <div id="colony-panel-title"></div>
-      <div id="colony-panel-subtitle"></div>
-      <div id="colony-panel-status"></div>
-      <div id="colony-panel-yields"></div>
-      <div class="colony-panel-buttons">
-        <button id="colony-panel-found">Found Colony</button>
-        <button id="colony-panel-close">Close</button>
+      <div class="cp-header">
+        <div id="colony-panel-title">Planet Name</div>
+        <button id="colony-panel-close-btn">✕</button>
       </div>
+      <div id="colony-panel-subtitle"></div>
+
+      <!-- Colony status badge (homeworld / colony / none) -->
+      <div id="colony-panel-status"></div>
+
+      <!-- Size + growth (only shown for colonies) -->
+      <div id="colony-panel-colony-section" style="display:none">
+        <hr class="cp-divider">
+        <div class="cp-section-label">Colony Status</div>
+
+        <div class="cp-size-row">
+          <span class="cp-size-name" id="cp-size-name">Settlement</span>
+          <div class="cp-progress-bar">
+            <div class="cp-progress-fill" id="cp-growth-fill" style="width:0%"></div>
+          </div>
+          <span class="cp-progress-label" id="cp-growth-label">0/10</span>
+          <span class="cp-progress-label" id="cp-next-size"></span>
+        </div>
+
+        <div class="cp-dev-row">
+          <span class="cp-dev-name" id="cp-dev-name">Primitive</span>
+          <button id="colony-panel-upgrade-btn" disabled>Upgrade</button>
+        </div>
+        <div class="cp-upgrade-cost" id="cp-upgrade-cost"></div>
+
+        <hr class="cp-divider">
+        <div class="cp-section-label">Resource Flows <span style="color:#334455">(per tick)</span></div>
+        <table class="cp-flows-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>extract</th>
+              <th>consume</th>
+              <th>net</th>
+            </tr>
+          </thead>
+          <tbody id="cp-flows-body"></tbody>
+        </table>
+
+        <hr class="cp-divider">
+        <div class="cp-section-label">Stockpiles</div>
+        <div class="cp-stockpile-grid" id="cp-stockpiles"></div>
+      </div>
+
+      <!-- Potential yields (shown for non-colony planets) -->
+      <div id="colony-panel-yields-section" style="display:none">
+        <hr class="cp-divider">
+        <div class="cp-section-label">Potential Yields</div>
+        <div id="colony-panel-yields"></div>
+      </div>
+
+      <button id="colony-panel-found" style="display:none">Found Colony</button>
     </div>
+
     <script type="module" src="/static/js/main.js"></script>
   </body>
 </html>

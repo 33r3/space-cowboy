@@ -35,7 +35,6 @@ const colonyManager = new ColonyManager()
 colonyManager.init().then(() => {
   const hw = colonyManager.homeworld
   if (hw?.star) {
-    // Navigate ship to the homeworld's star on first load
     ship.setDestination(hw.star.worldX, hw.star.worldY)
     camera.worldX = hw.star.worldX
     camera.worldY = hw.star.worldY
@@ -47,84 +46,180 @@ colonyManager.init().then(() => {
 const renderer = new Renderer(ctx, camera, galaxyClient, colonyManager)
 const input    = new InputHandler(canvas, camera, ship, viewport)
 
-input.onDebugToggle = () => {
-  renderer.showDebug = !renderer.showDebug
-}
-
-input.onCameraReset = () => {
-  camera.worldX = ship.worldX
-  camera.worldY = ship.worldY
-}
+input.onDebugToggle = () => { renderer.showDebug = !renderer.showDebug }
+input.onCameraReset = () => { camera.worldX = ship.worldX; camera.worldY = ship.worldY }
 
 // ── Colony panel ──────────────────────────────────────────────────────────────
 
-const colonyPanel      = document.getElementById('colony-panel')
-const colonyPanelTitle = document.getElementById('colony-panel-title')
-const colonyPanelSub   = document.getElementById('colony-panel-subtitle')
-const colonyPanelStatus = document.getElementById('colony-panel-status')
-const colonyPanelYields = document.getElementById('colony-panel-yields')
-const colonyPanelFound = document.getElementById('colony-panel-found')
-const colonyPanelClose = document.getElementById('colony-panel-close')
+const colonyPanel        = document.getElementById('colony-panel')
+const cpTitle            = document.getElementById('colony-panel-title')
+const cpSubtitle         = document.getElementById('colony-panel-subtitle')
+const cpStatus           = document.getElementById('colony-panel-status')
+const cpColonySection    = document.getElementById('colony-panel-colony-section')
+const cpYieldsSection    = document.getElementById('colony-panel-yields-section')
+const cpYields           = document.getElementById('colony-panel-yields')
+const cpFoundBtn         = document.getElementById('colony-panel-found')
+const cpCloseBtn         = document.getElementById('colony-panel-close-btn')
+const cpSizeName         = document.getElementById('cp-size-name')
+const cpGrowthFill       = document.getElementById('cp-growth-fill')
+const cpGrowthLabel      = document.getElementById('cp-growth-label')
+const cpNextSize         = document.getElementById('cp-next-size')
+const cpDevName          = document.getElementById('cp-dev-name')
+const cpUpgradeBtn       = document.getElementById('colony-panel-upgrade-btn')
+const cpUpgradeCost      = document.getElementById('cp-upgrade-cost')
+const cpFlowsBody        = document.getElementById('cp-flows-body')
+const cpStockpiles       = document.getElementById('cp-stockpiles')
 
-let _colonyPanelPlanet = null
-let _colonyPanelMeta   = null   // { cx, cy, starIndex } from system
+const SIZE_NAMES = ['Outpost', 'Settlement', 'Town', 'City', 'Megacity']
+const DEV_NAMES  = ['Primitive', 'Industrial', 'Advanced', 'Sophisticated', 'Transcendent']
+const GROWTH_NEEDED = 10
 
-function _openColonyPanel(planet, system) {
-  _colonyPanelPlanet = planet
-  _colonyPanelMeta   = { cx: null, cy: null, starIndex: null }
+const RES_LABELS = {
+  food: 'Food', water: 'Water', organicFuels: 'Org.Fuels',
+  chemFeedstocks: 'Chem.Feed', minerals: 'Minerals',
+  fusionFuel: 'Fusion', metals: 'Metals', radioactives: 'Radioact.',
+}
 
-  // Derive cx/cy/starIndex from the star id  (format: "cx,cy:starIndex")
-  const starId    = system.starId
-  const parts     = starId.split(':')
+let _panelPlanet = null
+let _panelMeta   = null   // { cx, cy, starIndex }
+
+function _fmtFlow(v) {
+  if (v === 0) return { text: '—', cls: 'net-zero' }
+  return { text: (v > 0 ? '+' : '') + v.toFixed(3), cls: v > 0 ? 'net-pos' : 'net-neg' }
+}
+
+function _renderColonySection(colony) {
+  cpColonySection.style.display = 'block'
+  cpYieldsSection.style.display = 'none'
+  cpFoundBtn.style.display      = 'none'
+
+  // Size + growth
+  const size = colony.size ?? 1
+  cpSizeName.textContent = SIZE_NAMES[size - 1] ?? 'Outpost'
+  const progress = colony.growthProgress ?? 0
+  const pct = size < 5 ? Math.min(100, (progress / GROWTH_NEEDED) * 100) : 100
+  cpGrowthFill.style.width = `${pct}%`
+  if (size < 5) {
+    cpGrowthLabel.textContent = `${progress}/${GROWTH_NEEDED}`
+    cpNextSize.textContent    = `→ ${SIZE_NAMES[size] ?? ''}`
+  } else {
+    cpGrowthLabel.textContent = 'max'
+    cpNextSize.textContent    = ''
+  }
+
+  // Development level
+  const dev = colony.developmentLevel ?? 1
+  cpDevName.textContent = `${DEV_NAMES[dev - 1] ?? 'Primitive'} (${dev})`
+  cpUpgradeBtn.disabled = !colony.canUpgradeDev || dev >= 5
+  cpUpgradeBtn.textContent = dev >= 5 ? 'Max' : `→ ${DEV_NAMES[dev] ?? ''}`
+
+  if (colony.upgradeCost && dev < 5) {
+    cpUpgradeCost.textContent = 'Cost: ' +
+      Object.entries(colony.upgradeCost)
+        .map(([k, v]) => `${v} ${RES_LABELS[k] ?? k}`)
+        .join(' · ')
+  } else {
+    cpUpgradeCost.textContent = ''
+  }
+
+  // Resource flows
+  const ext = colony.extractionPerTick ?? {}
+  const con = colony.consumptionPerTick ?? {}
+  const net = colony.netFlowPerTick ?? {}
+  const allRes = Object.keys(RES_LABELS)
+  const activeRes = allRes.filter(k =>
+    (ext[k] ?? 0) !== 0 || (con[k] ?? 0) !== 0 || (net[k] ?? 0) !== 0
+  )
+
+  cpFlowsBody.innerHTML = activeRes.map(k => {
+    const e = ext[k] ?? 0
+    const c = con[k] ?? 0
+    const n = net[k] ?? 0
+    const { text: nt, cls: nc } = _fmtFlow(n)
+    return `<tr>
+      <td>${RES_LABELS[k] ?? k}</td>
+      <td>${e > 0 ? '+' + e.toFixed(3) : '—'}</td>
+      <td>${c > 0 ? '-' + c.toFixed(3) : '—'}</td>
+      <td class="${nc}">${nt}</td>
+    </tr>`
+  }).join('')
+
+  // Stockpiles
+  const stocks = colony.stockpiles ?? {}
+  const nonZeroStocks = Object.entries(stocks).filter(([, v]) => v > 0)
+  if (nonZeroStocks.length > 0) {
+    cpStockpiles.innerHTML = nonZeroStocks.map(([k, v]) =>
+      `<div class="cp-stockpile-entry">
+        <span class="cp-stockpile-label">${RES_LABELS[k] ?? k}</span>
+        <span class="cp-stockpile-value">${v.toFixed(1)}</span>
+      </div>`
+    ).join('')
+  } else {
+    cpStockpiles.innerHTML = '<span style="color:#445566">Empty</span>'
+  }
+}
+
+function _renderYieldsSection(planet) {
+  cpColonySection.style.display = 'none'
+  const yields = planet.colonyYields ?? {}
+  const nonZero = Object.entries(yields).filter(([, v]) => v > 0)
+  if (nonZero.length > 0) {
+    cpYieldsSection.style.display = 'block'
+    const bar = v => {
+      const f = Math.round(v * 5)
+      return '\u2588'.repeat(f) + '\u2591'.repeat(5 - f) + ` ${v.toFixed(2)}`
+    }
+    cpYields.innerHTML = nonZero.map(([k, v]) =>
+      `<div style="font-size:10px;line-height:1.8;color:#88aacc">` +
+      `<span style="color:#445566">${(RES_LABELS[k] ?? k).padEnd(10,'\u00a0')}</span> ${bar(v)}</div>`
+    ).join('')
+  } else {
+    cpYieldsSection.style.display = 'none'
+  }
+  cpFoundBtn.style.display = 'block'
+  cpFoundBtn.disabled      = false
+  cpFoundBtn.textContent   = 'Found Colony'
+}
+
+function openColonyPanel(planet, system) {
+  _panelPlanet = planet
+
+  const starId     = system.starId
+  const parts      = starId.split(':')
   const chunkParts = parts[0].split(',')
-  _colonyPanelMeta = {
-    cx:         parseInt(chunkParts[0]),
-    cy:         parseInt(chunkParts[1]),
-    starIndex:  parseInt(parts[1]),
+  _panelMeta = {
+    cx:        parseInt(chunkParts[0]),
+    cy:        parseInt(chunkParts[1]),
+    starIndex: parseInt(parts[1]),
   }
 
   const isHW     = colonyManager.isHomeworld(planet.id)
   const isColony = colonyManager.isColony(planet.id)
 
-  colonyPanelTitle.textContent = planet.name
-  colonyPanelTitle.style.color = isHW ? '#ffd700' : isColony ? '#44ffcc' : '#aaccee'
+  cpTitle.textContent   = planet.name
+  cpTitle.style.color   = isHW ? '#ffd700' : isColony ? '#44ffcc' : '#aaccee'
+  cpSubtitle.textContent = `${planet.planetType}  ·  ${planet.semiMajorAxisAU.toFixed(2)} AU  ·  Hab ${planet.habitability.total}/100`
 
-  colonyPanelSub.textContent = `${planet.planetType}  ·  ${planet.semiMajorAxisAU.toFixed(2)} AU  ·  Hab ${planet.habitability.total}/100`
+  if (isHW)          cpStatus.innerHTML = '<span style="color:#ffd700;font-size:11px">★ Home World</span>'
+  else if (isColony) cpStatus.innerHTML = '<span style="color:#44ffcc;font-size:11px">■ Colony</span>'
+  else               cpStatus.innerHTML = ''
 
-  if (isHW)          colonyPanelStatus.innerHTML = '<span style="color:#ffd700">★ Home World</span>'
-  else if (isColony) colonyPanelStatus.innerHTML = '<span style="color:#44ffcc">■ Colony established</span>'
-  else               colonyPanelStatus.textContent = ''
-
-  // Yields
-  const yields = planet.colonyYields
-  if (yields) {
-    const nonZero = Object.entries(yields).filter(([, v]) => v > 0)
-    if (nonZero.length > 0) {
-      const LABELS = {
-        food: 'Food', water: 'Water', organicFuels: 'Org. Fuels',
-        chemFeedstocks: 'Chem. Feed.', minerals: 'Minerals',
-        fusionFuel: 'Fusion Fuel', metals: 'Metals', radioactives: 'Radioactives',
-      }
-      const bar = v => {
-        const f = Math.round(v * 5)
-        return '\u2588'.repeat(f) + '\u2591'.repeat(5 - f) + ` ${v.toFixed(2)}`
-      }
-      colonyPanelYields.innerHTML =
-        '<div class="yields-header">COLONY YIELDS</div>' +
-        nonZero.map(([k, v]) =>
-          `<div>${(LABELS[k] ?? k).padEnd(12, '\u00a0')} ${bar(v)}</div>`
-        ).join('')
-    } else {
-      colonyPanelYields.textContent = ''
-    }
+  if (isHW || isColony) {
+    const col = colonyManager.getColony(planet.id)
+    if (col) _renderColonySection(col)
+    else     _renderYieldsSection(planet)
   } else {
-    colonyPanelYields.textContent = ''
+    _renderYieldsSection(planet)
   }
 
-  colonyPanelFound.disabled = isHW || isColony
-  colonyPanelFound.textContent = isHW ? 'Home World' : isColony ? 'Colonized' : 'Found Colony'
-
   colonyPanel.style.display = 'block'
+}
+
+// Refresh panel if it's open and colony data was updated by polling
+colonyManager.onUpdate = () => {
+  if (colonyPanel.style.display === 'none' || !_panelPlanet) return
+  const col = colonyManager.getColony(_panelPlanet.id)
+  if (col) _renderColonySection(col)
 }
 
 input.onCanvasClick = () => {
@@ -133,37 +228,49 @@ input.onCanvasClick = () => {
     colonyPanel.style.display = 'none'
     return
   }
-  // Find which system this planet belongs to
   const bounds  = camera.getViewportBounds(viewport.width, viewport.height)
   const systems = galaxyClient.getSystemsInViewport(bounds)
   const system  = systems.find(s => s.planets.some(p => p.id === planet.id))
-  if (system) _openColonyPanel(planet, system)
+  if (system) openColonyPanel(planet, system)
 }
 
-colonyPanelClose.addEventListener('click', () => {
+cpCloseBtn.addEventListener('click', () => {
   colonyPanel.style.display = 'none'
 })
 
-colonyPanelFound.addEventListener('click', async () => {
-  if (!_colonyPanelPlanet || !_colonyPanelMeta) return
-  colonyPanelFound.disabled = true
-  colonyPanelFound.textContent = 'Founding...'
+cpFoundBtn.addEventListener('click', async () => {
+  if (!_panelPlanet || !_panelMeta) return
+  cpFoundBtn.disabled    = true
+  cpFoundBtn.textContent = 'Founding...'
   try {
-    await colonyManager.foundColony(
-      _colonyPanelPlanet,
-      _colonyPanelMeta.cx,
-      _colonyPanelMeta.cy,
-      _colonyPanelMeta.starIndex,
+    const col = await colonyManager.foundColony(
+      _panelPlanet, _panelMeta.cx, _panelMeta.cy, _panelMeta.starIndex,
     )
-    colonyPanelFound.textContent = 'Colonized'
-    colonyPanelStatus.innerHTML = '<span style="color:#44ffcc">■ Colony established</span>'
-    colonyPanelTitle.style.color = '#44ffcc'
+    cpStatus.innerHTML     = '<span style="color:#44ffcc;font-size:11px">■ Colony</span>'
+    cpTitle.style.color    = '#44ffcc'
+    if (col) _renderColonySection(col)
+    else { cpFoundBtn.textContent = 'Colonized'; cpFoundBtn.disabled = true }
   } catch (err) {
-    colonyPanelFound.disabled = false
-    colonyPanelFound.textContent = 'Found Colony'
-    colonyPanelStatus.textContent = `Error: ${err.message}`
+    cpFoundBtn.disabled    = false
+    cpFoundBtn.textContent = 'Found Colony'
+    cpStatus.innerHTML     = `<span style="color:#cc4444;font-size:10px">${err.message}</span>`
   }
 })
+
+cpUpgradeBtn.addEventListener('click', async () => {
+  if (!_panelPlanet) return
+  cpUpgradeBtn.disabled    = true
+  cpUpgradeBtn.textContent = 'Upgrading...'
+  try {
+    const col = await colonyManager.upgradeColony(_panelPlanet.id)
+    _renderColonySection(col)
+  } catch (err) {
+    cpUpgradeBtn.disabled    = false
+    cpStatus.innerHTML = `<span style="color:#cc4444;font-size:10px">${err.message}</span>`
+  }
+})
+
+// ── Mouse tracking ────────────────────────────────────────────────────────────
 
 canvas.addEventListener('mousemove', (e) => {
   renderer.mouseX = e.clientX
@@ -174,7 +281,7 @@ canvas.addEventListener('mouseleave', () => {
   renderer.mouseY = -9999
 })
 
-// ── HUD elements ──────────────────────────────────────────────────────────────
+// ── HUD ───────────────────────────────────────────────────────────────────────
 
 const hudPos    = document.getElementById('hud-pos')
 const hudZoom   = document.getElementById('hud-zoom')
@@ -185,13 +292,12 @@ const hudSeed   = document.getElementById('hud-seed')
 if (hudSeed) hudSeed.textContent = String(config.seed)
 
 // ── Pre-fetch initial viewport area ──────────────────────────────────────────
-// Kick off background fetches covering the initial galaxy overview
+
 ;(() => {
   const r    = config.galaxyRadiusLy * 0.6
   const step = config.chunkSizeLy * 8
   for (let x = -r; x <= r; x += step) {
     for (let y = -r; y <= r; y += step) {
-      // Touch getStarsInViewport with a tiny bounds to trigger fetches
       galaxyClient.getStarsInViewport({ minX: x, minY: y, maxX: x + 1, maxY: y + 1 })
     }
   }
@@ -201,30 +307,19 @@ if (hudSeed) hudSeed.textContent = String(config.seed)
 
 let lastTime    = 0
 let lastPersist = 0
-let frameCount  = 0
-let lastFpsTime = 0
 
 function gameLoop(timestamp) {
   const dtMs  = Math.min(timestamp - lastTime, 100)
   const dtSec = dtMs / 1000
   lastTime = timestamp
-  frameCount++
 
-  if (timestamp - lastFpsTime >= 1000) {
-    frameCount  = 0
-    lastFpsTime = timestamp
-  }
-
-  // ── Update ────────────────────────────────────────────────────────────────
   input.update()
   ship.update(dtSec)
 
   const shipBounds = ship.getExplorationBounds()
   const viewBounds = camera.getViewportBounds(viewport.width, viewport.height)
 
-  // Kick off chunk fetches for ship area + viewport (triggers async loads)
   galaxyClient.getStarsInViewport(shipBounds)
-
   explorationTracker.markExploredBounds(
     shipBounds.minX, shipBounds.minY, shipBounds.maxX, shipBounds.maxY,
     config.chunkSizeLy,
@@ -235,11 +330,9 @@ function gameLoop(timestamp) {
     lastPersist = timestamp
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
   const stars = galaxyClient.getStarsInViewport(viewBounds)
   renderer.render(viewport.width, viewport.height, ship, stars.length)
 
-  // ── HUD ───────────────────────────────────────────────────────────────────
   if (hudPos)    hudPos.textContent    = `${ship.worldX.toFixed(0)}, ${ship.worldY.toFixed(0)} Ly`
   if (hudZoom)   hudZoom.textContent   = `${camera.zoom.toFixed(4)} px/Ly`
   if (hudStars)  hudStars.textContent  = String(stars.length)
@@ -249,7 +342,6 @@ function gameLoop(timestamp) {
 }
 
 requestAnimationFrame((t) => {
-  lastTime    = t
-  lastFpsTime = t
+  lastTime = t
   requestAnimationFrame(gameLoop)
 })
