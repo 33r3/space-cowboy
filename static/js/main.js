@@ -82,6 +82,11 @@ const cpUpgradeBtn       = document.getElementById('colony-panel-upgrade-btn')
 const cpUpgradeCost      = document.getElementById('cp-upgrade-cost')
 const cpFlowsBody        = document.getElementById('cp-flows-body')
 const cpStockpiles       = document.getElementById('cp-stockpiles')
+const cpTransitSection   = document.getElementById('colony-panel-transit-section')
+const cpTransitBar       = document.getElementById('cp-transit-bar-fill')
+const cpTransitLabel     = document.getElementById('cp-transit-label')
+const cpTransitSource    = document.getElementById('cp-transit-source')
+const cpTransitEta       = document.getElementById('cp-transit-eta')
 
 const SIZE_NAMES = ['Outpost', 'Settlement', 'Town', 'City', 'Megacity']
 const DEV_NAMES  = ['Primitive', 'Industrial', 'Advanced', 'Sophisticated', 'Transcendent']
@@ -101,10 +106,26 @@ function _fmtFlow(v) {
   return { text: (v > 0 ? '+' : '') + v.toFixed(3), cls: v > 0 ? 'net-pos' : 'net-neg' }
 }
 
+function _renderTransitSection(colony) {
+  cpColonySection.style.display  = 'none'
+  cpYieldsSection.style.display  = 'none'
+  cpFoundBtn.style.display       = 'none'
+  cpTransitSection.style.display = 'block'
+
+  const pct = colony.transitProgressPct ?? 0
+  const eta = Math.ceil(colony.ticksRemaining ?? 0)
+  cpTransitBar.style.width   = `${pct}%`
+  cpTransitLabel.textContent = `${pct.toFixed(1)}%`
+  cpTransitEta.textContent   = `ETA: ~${eta} tick${eta !== 1 ? 's' : ''} (~${eta} min)`
+  const srcCol = colony.sourcePlanetId ? colonyManager.getColony(colony.sourcePlanetId) : null
+  cpTransitSource.textContent = `From: ${srcCol?.name ?? colony.sourcePlanetId ?? 'Unknown'}`
+}
+
 function _renderColonySection(colony) {
-  cpColonySection.style.display = 'block'
-  cpYieldsSection.style.display = 'none'
-  cpFoundBtn.style.display      = 'none'
+  cpColonySection.style.display  = 'block'
+  cpYieldsSection.style.display  = 'none'
+  cpTransitSection.style.display = 'none'
+  cpFoundBtn.style.display       = 'none'
 
   if (colony.isAbandoned) {
     cpUpgradeBtn.disabled    = true
@@ -180,7 +201,8 @@ function _renderColonySection(colony) {
 }
 
 function _renderYieldsSection(planet, meta) {
-  cpColonySection.style.display = 'none'
+  cpColonySection.style.display  = 'none'
+  cpTransitSection.style.display = 'none'
 
   // Potential yields
   const yields  = planet.colonyYields ?? {}
@@ -216,12 +238,16 @@ function _renderYieldsSection(planet, meta) {
           const src      = preview.sourceColony
           const affordColor = preview.canAfford ? '#66cc88' : '#cc4444'
           const affordText  = preview.canAfford ? 'affordable' : 'INSUFFICIENT FUNDS'
+          const transitLine = preview.transitTicks
+            ? `Transit: <span style="color:#88aacc">~${preview.transitTicks} min</span><br>`
+            : ''
           cpStatus.innerHTML =
             `<div style="font-size:10px;line-height:1.9;color:#556677">` +
             `Source: <span style="color:#88aacc">${src.name}</span>` +
             ` <span style="color:#334455">(${src.devName})</span>` +
             `  <span style="color:#334455">${preview.distance} Ly / ${preview.maxRange} Ly max</span><br>` +
             `Cost: <span style="color:#88aacc">${costStr}</span><br>` +
+            transitLine +
             `<span style="color:${affordColor}">${affordText}</span>` +
             `</div>`
           cpFoundBtn.disabled    = !preview.canAfford
@@ -255,21 +281,29 @@ function openColonyPanel(planet, system) {
     starIndex: parseInt(parts[1]),
   }
 
-  const isHW       = colonyManager.isHomeworld(planet.id)
-  const isColony   = colonyManager.isColony(planet.id)
-  const col        = (isHW || isColony) ? colonyManager.getColony(planet.id) : null
+  const isHW        = colonyManager.isHomeworld(planet.id)
+  const isTransit   = colonyManager.isInTransit(planet.id)
+  const isColony    = colonyManager.isColony(planet.id)
+  const col         = (isHW || isColony) ? colonyManager.getColony(planet.id) : null
   const isAbandoned = col?.isAbandoned ?? false
 
   cpTitle.textContent   = planet.name
-  cpTitle.style.color   = isAbandoned ? '#cc4444' : isHW ? '#ffd700' : isColony ? '#44ffcc' : '#aaccee'
+  cpTitle.style.color   = isAbandoned ? '#cc4444'
+                        : isHW        ? '#ffd700'
+                        : isTransit   ? '#ffaa44'
+                        : isColony    ? '#44ffcc'
+                        : '#aaccee'
   cpSubtitle.textContent = `${planet.planetType}  ·  ${planet.semiMajorAxisAU.toFixed(2)} AU  ·  Hab ${planet.habitability.total}/100`
 
-  if (isAbandoned)   cpStatus.innerHTML = '<span style="color:#cc4444;font-size:11px">☠ Abandoned</span>'
-  else if (isHW)     cpStatus.innerHTML = '<span style="color:#ffd700;font-size:11px">★ Home World</span>'
-  else if (isColony) cpStatus.innerHTML = '<span style="color:#44ffcc;font-size:11px">■ Colony</span>'
-  else               cpStatus.innerHTML = ''
+  if (isAbandoned)    cpStatus.innerHTML = '<span style="color:#cc4444;font-size:11px">☠ Abandoned</span>'
+  else if (isHW)      cpStatus.innerHTML = '<span style="color:#ffd700;font-size:11px">★ Home World</span>'
+  else if (isTransit) cpStatus.innerHTML = '<span style="color:#ffaa44;font-size:11px">▶ Colony Ship In Transit</span>'
+  else if (isColony)  cpStatus.innerHTML = '<span style="color:#44ffcc;font-size:11px">■ Colony</span>'
+  else                cpStatus.innerHTML = ''
 
-  if (isHW || isColony) {
+  if (isTransit && col) {
+    _renderTransitSection(col)
+  } else if (isHW || isColony) {
     if (col) _renderColonySection(col)
     else     _renderYieldsSection(planet, _panelMeta)
   } else {
@@ -283,11 +317,20 @@ function openColonyPanel(planet, system) {
 colonyManager.onUpdate = () => {
   if (colonyPanel.style.display === 'none' || !_panelPlanet) return
   const col = colonyManager.getColony(_panelPlanet.id)
-  if (col) {
-    _renderColonySection(col)
-  } else {
+  if (!col) {
     // Re-check colonization eligibility in case source stockpiles changed
     _renderYieldsSection(_panelPlanet, _panelMeta)
+    return
+  }
+  if (col.status === 'in_transit') {
+    cpTitle.style.color = '#ffaa44'
+    cpStatus.innerHTML  = '<span style="color:#ffaa44;font-size:11px">▶ Colony Ship In Transit</span>'
+    _renderTransitSection(col)
+  } else {
+    if (cpTransitSection) cpTransitSection.style.display = 'none'
+    cpTitle.style.color = col.isAbandoned ? '#cc4444'
+                        : colonyManager.isHomeworld(_panelPlanet.id) ? '#ffd700' : '#44ffcc'
+    _renderColonySection(col)
   }
 }
 
@@ -315,10 +358,18 @@ cpFoundBtn.addEventListener('click', async () => {
     const col = await colonyManager.foundColony(
       _panelPlanet, _panelMeta.cx, _panelMeta.cy, _panelMeta.starIndex,
     )
-    cpStatus.innerHTML     = '<span style="color:#44ffcc;font-size:11px">■ Colony</span>'
-    cpTitle.style.color    = '#44ffcc'
-    if (col) _renderColonySection(col)
-    else { cpFoundBtn.textContent = 'Colonized'; cpFoundBtn.disabled = true }
+    if (col?.status === 'in_transit') {
+      cpTitle.style.color = '#ffaa44'
+      cpStatus.innerHTML  = '<span style="color:#ffaa44;font-size:11px">▶ Colony Ship In Transit</span>'
+      _renderTransitSection(col)
+    } else if (col) {
+      cpTitle.style.color = '#44ffcc'
+      cpStatus.innerHTML  = '<span style="color:#44ffcc;font-size:11px">■ Colony</span>'
+      _renderColonySection(col)
+    } else {
+      cpFoundBtn.textContent = 'Colonized'
+      cpFoundBtn.disabled    = true
+    }
   } catch (err) {
     cpFoundBtn.disabled    = false
     cpFoundBtn.textContent = 'Found Colony'
@@ -440,9 +491,10 @@ let _builderShips   = []
 let _builderLegs    = []   // [{ fromId, toId, cargo }]
 
 function _getColonyOptions() {
-  return colonyManager.colonies.map(c =>
-    `<option value="${c.planetId}">${c.name}</option>`
-  ).join('')
+  return colonyManager.colonies
+    .filter(c => colonyManager.isActiveColony(c.planetId))
+    .map(c => `<option value="${c.planetId}">${c.name}</option>`)
+    .join('')
 }
 
 function _updateSetupCostDisplay() {
@@ -524,9 +576,9 @@ async function _openBuilder() {
   rpNewBtn.style.display  = 'none'
   rpBuilderError.textContent = ''
 
-  const colonies = colonyManager.colonies
+  const colonies = colonyManager.colonies.filter(c => colonyManager.isActiveColony(c.planetId))
   if (!colonies.length) {
-    rpBuilderError.textContent = 'No colonies available.'
+    rpBuilderError.textContent = 'No active colonies available.'
     return
   }
 
@@ -560,7 +612,7 @@ function _closeBuilder() {
 rpShipSelect?.addEventListener('change', _updateSetupCostDisplay)
 
 rpAddLeg?.addEventListener('click', () => {
-  const colonies = colonyManager.colonies
+  const colonies = colonyManager.colonies.filter(c => colonyManager.isActiveColony(c.planetId))
   _builderLegs.push({
     fromId: colonies[0]?.planetId ?? '',
     toId:   colonies[1]?.planetId ?? colonies[0]?.planetId ?? '',

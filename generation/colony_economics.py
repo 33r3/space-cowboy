@@ -14,7 +14,8 @@ from datetime import datetime, timezone
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-TICK_SECONDS = 60   # 1 real-world minute = 1 game tick
+TICK_SECONDS                = 60   # 1 real-world minute = 1 game tick
+COLONY_SHIP_SPEED_LY_PER_TICK = 60  # Ly per tick; slower than the slowest freighter (100 Ly/tick)
 
 SIZE_NAMES = ['Outpost', 'Settlement', 'Town', 'City', 'Megacity']
 SIZE_MULT  = [0.5, 1.0, 2.0, 4.0, 8.0]
@@ -94,8 +95,11 @@ def migrate_colony(colony: dict) -> dict:
     colony.setdefault('developmentLevel', 1)
     colony.setdefault('growthProgress', 0)
     colony.setdefault('starvationTicks', 0)
-    colony.setdefault('status', 'active')        # 'active' | 'abandoned'
+    colony.setdefault('status', 'active')        # 'active' | 'in_transit' | 'abandoned'
     colony.setdefault('isHomeworld', False)
+    colony.setdefault('departedAt',     None)    # ISO str; only set for in_transit
+    colony.setdefault('transitTicks',   None)    # int; only set for in_transit
+    colony.setdefault('sourcePlanetId', None)    # str; only set for in_transit
     colony.setdefault('lastTickedAt', _now_iso())
     colony.setdefault('stockpiles', {r: 0.0 for r in ALL_RESOURCES})
     # Ensure all resource keys exist in stockpiles
@@ -158,8 +162,8 @@ def apply_ticks(colony: dict, planet_yields: dict, n_ticks: int) -> dict:
     con = consumption_per_tick(colony)
 
     for _ in range(n_ticks):
-        # Abandoned colonies don't process ticks
-        if colony.get('status') == 'abandoned':
+        # In-transit and abandoned colonies don't process economic ticks
+        if colony.get('status') in ('abandoned', 'in_transit'):
             break
 
         # Extraction

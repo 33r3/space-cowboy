@@ -442,6 +442,21 @@
         <div class="cp-stockpile-grid" id="cp-stockpiles"></div>
       </div>
 
+      <!-- Colony ship in transit (shown while ship is en route) -->
+      <div id="colony-panel-transit-section" style="display:none">
+        <hr class="cp-divider">
+        <div class="cp-section-label">Colony Ship In Transit</div>
+        <div id="cp-transit-source" style="color:#ffaa44;font-size:10px;margin-bottom:6px"></div>
+        <div class="cp-size-row">
+          <div class="cp-progress-bar" style="flex:1">
+            <div class="cp-progress-fill" id="cp-transit-bar-fill"
+                 style="width:0%;background:#ffaa44"></div>
+          </div>
+          <span class="cp-progress-label" id="cp-transit-label">0%</span>
+        </div>
+        <div id="cp-transit-eta" style="color:#556677;font-size:10px;margin-top:4px"></div>
+      </div>
+
       <!-- Potential yields (shown for non-colony planets) -->
       <div id="colony-panel-yields-section" style="display:none">
         <hr class="cp-divider">

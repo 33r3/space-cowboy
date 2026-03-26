@@ -11,7 +11,8 @@ from generation.chunk_generator import generate_chunk, chunks_in_bounds, regener
 from generation.planet_factory import generate_system
 from generation.homeworld import find_homeworld
 from generation.colony_economics import (
-    STARTER_STOCKPILES, MIN_DEV_TO_COLONIZE,
+    STARTER_STOCKPILES, MIN_DEV_TO_COLONIZE, TICK_SECONDS,
+    COLONY_SHIP_SPEED_LY_PER_TICK,
     migrate_colony, apply_ticks, pending_ticks,
     extraction_per_tick, consumption_per_tick, net_flow_per_tick,
     can_upgrade_dev, apply_upgrade_dev, size_name, dev_name, upgrade_cost,
@@ -95,8 +96,30 @@ def _find_source_colony(data: dict, target_x: float, target_y: float):
     return (best_col, best_dist) if best_col else None
 
 
+_ENRICHED_KEYS = frozenset({
+    'planet', 'extractionPerTick', 'consumptionPerTick',
+    'netFlowPerTick', 'sizeName', 'devName',
+    'canUpgradeDev', 'upgradeCost', 'isAbandoned',
+    'transitProgressPct', 'ticksRemaining',
+})
+
+
 def _enrich_colony(col: dict, planet: dict) -> dict:
-    """Add computed economics fields to a colony record for the API response."""
+    """Add computed fields to a colony record for the API response."""
+    if col.get('status') == 'in_transit':
+        departed     = datetime.fromisoformat(col['departedAt'].replace('Z', '+00:00'))
+        elapsed_s    = (datetime.now(tz=timezone.utc) - departed).total_seconds()
+        transit_secs = col['transitTicks'] * TICK_SECONDS
+        pct          = round(min(100.0, elapsed_s / max(1, transit_secs) * 100), 1)
+        remaining    = max(0.0, round(col['transitTicks'] - elapsed_s / TICK_SECONDS, 1))
+        return {
+            **col,
+            'planet':             planet,
+            'transitProgressPct': pct,
+            'ticksRemaining':     remaining,
+            'isAbandoned':        False,
+        }
+
     yields = planet['colonyYields']
     ext    = extraction_per_tick(col, yields)
     con    = consumption_per_tick(col)
@@ -212,6 +235,24 @@ def api_colonies_get():
         if planet is None:
             continue
 
+        # Colony ship in transit — check arrival, skip economics
+        if col.get('status') == 'in_transit':
+            departed  = datetime.fromisoformat(col['departedAt'].replace('Z', '+00:00'))
+            elapsed_s = (datetime.now(tz=timezone.utc) - departed).total_seconds()
+            if elapsed_s >= col['transitTicks'] * TICK_SECONDS:
+                # Ship arrived — promote to active
+                col['status']         = 'active'
+                col['departedAt']     = None
+                col['transitTicks']   = None
+                col['sourcePlanetId'] = None
+                col['lastTickedAt']   = _now_iso()
+                changed = True
+                # Fall through to normal economic tick below
+            else:
+                enriched.append(_enrich_colony(col, planet))
+                changed = True   # migrate_colony may have added fields
+                continue
+
         # Apply pending ticks (lazy real-time advance)
         n = pending_ticks(col['lastTickedAt'])
         if n > 0:
@@ -222,12 +263,9 @@ def api_colonies_get():
         enriched.append(_enrich_colony(col, planet))
 
     if changed:
-        # Write back updated colonies (without enrichment fields)
+        # Write back updated colonies (strip computed-only fields)
         data['colonies'] = [
-            {k: v for k, v in e.items()
-             if k not in ('planet', 'extractionPerTick', 'consumptionPerTick',
-                          'netFlowPerTick', 'sizeName', 'devName',
-                          'canUpgradeDev', 'upgradeCost')}
+            {k: v for k, v in e.items() if k not in _ENRICHED_KEYS}
             for e in enriched
         ]
         _save_colonies(data)
@@ -276,12 +314,15 @@ def api_colonization_preview():
         for k, v in cost.items()
     )
 
+    transit_ticks = max(1, math.ceil(distance / COLONY_SHIP_SPEED_LY_PER_TICK))
+
     return jsonify({
-        'eligible':    True,
-        'cost':        cost,
-        'canAfford':   can_afford,
-        'distance':    round(distance, 1),
-        'maxRange':    colonization_range(source_col['developmentLevel']),
+        'eligible':     True,
+        'cost':         cost,
+        'canAfford':    can_afford,
+        'distance':     round(distance, 1),
+        'maxRange':     colonization_range(source_col['developmentLevel']),
+        'transitTicks': transit_ticks,
         'sourceColony': {
             'planetId':         source_col['planetId'],
             'name':             source_col['name'],
@@ -352,19 +393,37 @@ def api_colonies_post():
         source_col if c['planetId'] == source_col['planetId'] else c
         for c in data['colonies']
     ]
-    # ── Create new colony ──────────────────────────────────────────────────────
-    colony = migrate_colony({
-        'planetId':   planet_id,
-        'name':       planet['name'],
-        'cx':         cx,
-        'cy':         cy,
-        'starIndex':  star_index,
-        'founded':    str(date.today()),
-        'lastTickedAt': _now_iso(),
-    })
+    # ── Compute transit duration ────────────────────────────────────────────────
+    source_pos  = _star_position(source_col)
+    target_pos  = (star['worldX'], star['worldY'])
+    distance_ly = math.sqrt(
+        (source_pos[0] - target_pos[0]) ** 2 + (source_pos[1] - target_pos[1]) ** 2
+    ) if source_pos else 0.0
+    transit_ticks = max(1, math.ceil(distance_ly / COLONY_SHIP_SPEED_LY_PER_TICK))
+
+    # ── Create in-transit colony record ────────────────────────────────────────
+    colony = {
+        'planetId':        planet_id,
+        'name':            planet['name'],
+        'cx':              cx,
+        'cy':              cy,
+        'starIndex':       star_index,
+        'founded':         str(date.today()),
+        'status':          'in_transit',
+        'departedAt':      _now_iso(),
+        'transitTicks':    transit_ticks,
+        'sourcePlanetId':  source_col['planetId'],
+        'lastTickedAt':    _now_iso(),
+        'size':            1,
+        'developmentLevel': 1,
+        'growthProgress':  0,
+        'starvationTicks': 0,
+        'isHomeworld':     False,
+        'stockpiles':      dict(STARTER_STOCKPILES),
+    }
     data['colonies'].append(colony)
     _save_colonies(data)
-    return jsonify({'colony': colony, 'planet': planet}), 201
+    return jsonify({'colony': colony, 'planet': planet, 'transitTicks': transit_ticks}), 201
 
 
 @app.route('/api/colonies/<path:planet_id>/upgrade', methods=['POST'])
@@ -379,6 +438,9 @@ def api_colony_upgrade(planet_id: str):
     _, planet = _get_planet(colony['cx'], colony['cy'], colony['starIndex'], planet_id)
     if planet is None:
         return jsonify({'error': 'planet not found'}), 404
+
+    if colony.get('status') == 'in_transit':
+        return jsonify({'error': 'colony ship is still in transit'}), 400
 
     # Apply pending ticks first
     n = pending_ticks(colony['lastTickedAt'])

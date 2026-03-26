@@ -35,6 +35,21 @@ export class ColonyManager {
     return this.#colonyIds.has(planetId)
   }
 
+  /** True only if the colony ship is still in transit (not yet established). */
+  isInTransit(planetId) {
+    return this.getColony(planetId)?.status === 'in_transit'
+  }
+
+  /**
+   * True if the colony is fully active (has a running economy).
+   * Excludes in_transit and abandoned colonies.
+   */
+  isActiveColony(planetId) {
+    if (this.isHomeworld(planetId)) return true
+    const col = this.getColony(planetId)
+    return col != null && col.status !== 'in_transit' && col.status !== 'abandoned'
+  }
+
   /** Return the enriched colony record for a planet, or null. */
   getColony(planetId) {
     return this.#colonies.find(c => c.planetId === planetId) ?? null

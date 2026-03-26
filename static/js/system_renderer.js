@@ -140,6 +140,15 @@ export class SystemRenderer {
         ctx.strokeStyle = '#ffd700'
         ctx.lineWidth   = 2
         ctx.stroke()
+      } else if (this.colonyManager.isInTransit(planet.id)) {
+        ctx.save()
+        ctx.setLineDash([4, 4])
+        ctx.beginPath()
+        ctx.arc(sx, sy, radius + 3, 0, TWO_PI)
+        ctx.strokeStyle = '#ffaa44'
+        ctx.lineWidth   = 1.5
+        ctx.stroke()
+        ctx.restore()
       } else if (this.colonyManager.isColony(planet.id)) {
         ctx.beginPath()
         ctx.arc(sx, sy, radius + 3, 0, TWO_PI)
@@ -179,9 +188,10 @@ export class SystemRenderer {
 
   renderTooltip(planet, mouseX, mouseY, canvasW, canvasH) {
     const ctx   = this.ctx
-    const isHomeworld = this.colonyManager?.isHomeworld(planet.id) ?? false
-    const isColony    = this.colonyManager?.isColony(planet.id)    ?? false
-    const lines = buildTooltipLines(planet, isHomeworld, isColony)
+    const isHomeworld = this.colonyManager?.isHomeworld(planet.id)  ?? false
+    const isInTransit = this.colonyManager?.isInTransit(planet.id)  ?? false
+    const isColony    = this.colonyManager?.isColony(planet.id)     ?? false
+    const lines = buildTooltipLines(planet, isHomeworld, isColony, isInTransit)
 
     const lineH   = 15
     const padding = 10
@@ -260,7 +270,7 @@ function _yieldBar(v) {
   return '\u2588'.repeat(filled) + '\u2591'.repeat(5 - filled) + ` ${v.toFixed(2)}`
 }
 
-function buildTooltipLines(p, isHomeworld, isColony) {
+function buildTooltipLines(p, isHomeworld, isColony, isInTransit = false) {
   const H  = '#aaccee'
   const V  = '#88aacc'
   const D  = '#556677'
@@ -269,6 +279,7 @@ function buildTooltipLines(p, isHomeworld, isColony) {
   const R  = '#cc4422'
   const GD = '#ffd700'
   const CY = '#44ffcc'
+  const AM = '#ffaa44'
 
   const hab = p.habitability
   const habColor = hab.total >= 66 ? G : hab.total >= 46 ? V : hab.total >= 26 ? W : R
@@ -277,12 +288,13 @@ function buildTooltipLines(p, isHomeworld, isColony) {
   const tempStr = `${p.surfaceTempK} K (${tempC > 0 ? '+' : ''}${tempC}\u00b0C)`
 
   const lines = [
-    { text: p.name, color: isHomeworld ? GD : isColony ? CY : H },
+    { text: p.name, color: isHomeworld ? GD : isInTransit ? AM : isColony ? CY : H },
     { text: `${p.planetType}  \u00b7  ${p.semiMajorAxisAU.toFixed(2)} AU`, color: D },
   ]
 
-  if (isHomeworld) lines.push({ text: '\u2605 Home World', color: GD })
-  else if (isColony) lines.push({ text: '\u25a0 Colony', color: CY })
+  if (isHomeworld)        lines.push({ text: '\u2605 Home World', color: GD })
+  else if (isInTransit)   lines.push({ text: '\u25b6 Colony Ship In Transit', color: AM })
+  else if (isColony)      lines.push({ text: '\u25a0 Colony', color: CY })
 
   lines.push(
     { text: '', color: D },
@@ -303,7 +315,7 @@ function buildTooltipLines(p, isHomeworld, isColony) {
     const nonZero = Object.entries(yields).filter(([, v]) => v > 0)
     if (nonZero.length > 0) {
       lines.push({ text: '', color: D })
-      lines.push({ text: 'COLONY YIELDS', color: isHomeworld ? GD : isColony ? CY : V })
+      lines.push({ text: 'COLONY YIELDS', color: isHomeworld ? GD : isInTransit ? AM : isColony ? CY : V })
       for (const [key, val] of nonZero) {
         lines.push({ text: `${YIELD_LABELS[key] ?? key}${_yieldBar(val)}`, color: V })
       }
