@@ -45,8 +45,9 @@ export class SystemRenderer {
     )
 
     // ── HZ ring ─────────────────────────────────────────────────────────────
-    const hzInnerPx = system.hzInnerAU * VISUAL_AU_TO_LY * camera.zoom
-    const hzOuterPx = system.hzOuterAU * VISUAL_AU_TO_LY * camera.zoom
+    const vs = system.visualScale ?? VISUAL_AU_TO_LY
+    const hzInnerPx = system.hzInnerAU * vs * camera.zoom
+    const hzOuterPx = system.hzOuterAU * vs * camera.zoom
 
     if (hzOuterPx > 8) {
       const grad = ctx.createRadialGradient(starSx, starSy, hzInnerPx, starSx, starSy, hzOuterPx)
@@ -68,7 +69,7 @@ export class SystemRenderer {
     ctx.setLineDash([3, 5])
 
     for (const planet of system.planets) {
-      const radiusPx = planet.semiMajorAxisAU * VISUAL_AU_TO_LY * camera.zoom
+      const radiusPx = planet.semiMajorAxisAU * vs * camera.zoom
       if (radiusPx < 4) continue
       ctx.beginPath()
       ctx.arc(starSx, starSy, radiusPx, 0, TWO_PI)
@@ -130,12 +131,12 @@ export class SystemRenderer {
       ctx.fill()
     }
 
-    if (camera.zoom > 3) {
+    if (camera.zoom > 8) {
       ctx.font = `${Math.max(9, Math.min(12, camera.zoom * 0.4))}px "Courier New", monospace`
       ctx.fillStyle = 'rgba(160, 190, 220, 0.75)'
       ctx.fillText(planet.name, sx + radius + 3, sy + 4)
 
-      if (camera.zoom > 6) {
+      if (camera.zoom > 15) {
         ctx.font = '9px "Courier New", monospace'
         ctx.fillStyle = 'rgba(100, 130, 160, 0.55)'
         ctx.fillText(`${planet.planetType} · ${planet.habitability.total}/100`, sx + radius + 3, sy + 15)

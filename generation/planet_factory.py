@@ -503,12 +503,22 @@ def _select_planet_type(prng: PRNG, t_eq: float, semi_major_au: float, star: dic
 
 # ── Main factory ──────────────────────────────────────────────────────────────
 
+_MAX_VISUAL_SYSTEM_RADIUS_LY = 15.0
+
+
 def generate_system(star: dict) -> dict:
     """Generates a complete planetary system from a star dict."""
     prng   = PRNG(star['systemSeed'])
     hz     = habitable_zone(star['luminositySolar'])
     count  = planet_count(prng, star)
     slots  = generate_orbital_slots(prng, count, star)
+
+    # Per-system visual scale: cap so no system exceeds _MAX_VISUAL_SYSTEM_RADIUS_LY.
+    # Normal Sun-like stars are unaffected; only massive/luminous stars are compressed.
+    outer_au = hz['outer']
+    if slots:
+        outer_au = max(outer_au, slots[-1]['semiMajorAxisAU'])
+    visual_scale = min(VISUAL_AU_TO_LY, _MAX_VISUAL_SYSTEM_RADIUS_LY / outer_au)
 
     planets = []
     for index, slot in enumerate(slots):
@@ -525,8 +535,8 @@ def generate_system(star: dict) -> dict:
         habitability = _compute_habitability(litho, final_atmo, hydro, bio, surface_temp, star)
 
         angle  = slot['orbitalAngleRad']
-        world_x = star['worldX'] + slot['semiMajorAxisAU'] * VISUAL_AU_TO_LY * math.cos(angle)
-        world_y = star['worldY'] + slot['semiMajorAxisAU'] * VISUAL_AU_TO_LY * math.sin(angle)
+        world_x = star['worldX'] + slot['semiMajorAxisAU'] * visual_scale * math.cos(angle)
+        world_y = star['worldY'] + slot['semiMajorAxisAU'] * visual_scale * math.sin(angle)
 
         planets.append({
             'id':      f"{star['id']}:{index}",
@@ -567,4 +577,5 @@ def generate_system(star: dict) -> dict:
         'planets':    planets,
         'hzInnerAU':  hz['inner'],
         'hzOuterAU':  hz['outer'],
+        'visualScale': visual_scale,
     }
