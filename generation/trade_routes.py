@@ -3,8 +3,16 @@ Trade route engine — pure functions, no I/O.
 
 Routes move cargo between colonies on repeat cycles. Each route has one or
 more legs; a ship departs each leg automatically once the previous leg
-arrives. Cargo is best-effort: if the source can't fill the full amount,
-it ships what's available.
+arrives.
+
+Delta loading: when a leg arrives at a waypoint that is also the departure
+point for the next leg, only the *difference* between inbound and outbound
+cargo is transacted. Goods that pass through untouched never enter the
+colony's stockpile, preventing the colony economy from temporarily absorbing
+and re-releasing them.
+
+If a route leg encounters an abandoned colony, the route is paused and an
+event is appended to the route's `events` list.
 """
 import copy
 import math
@@ -166,11 +174,35 @@ def validate_route(
     return True, ''
 
 
-# ── Tick engine ────────────────────────────────────────────────────────────────
+# ── Notifications ──────────────────────────────────────────────────────────────
 
 def _now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
+
+def _add_event(route: dict, colony, colony_id: str, event_type: str) -> None:
+    """
+    Append an event to route['events'] and pause the route.
+    colony may be None if the planet no longer exists in colonies_data.
+    """
+    name = colony.get('name', colony_id) if colony else colony_id
+    if event_type == 'abandoned_transit':
+        msg = f'Ship stalled — {name} has been abandoned.'
+    else:
+        msg = f'Unexpected event at {name}.'
+
+    route.setdefault('events', [])
+    route['events'].append({
+        'message':   msg,
+        'timestamp': _now_iso(),
+        'read':      False,
+    })
+    # Keep last 10
+    route['events'] = route['events'][-10:]
+    route['status'] = 'paused'
+
+
+# ── Tick engine ────────────────────────────────────────────────────────────────
 
 def _parse_iso(ts: str) -> datetime:
     return datetime.fromisoformat(ts.replace('Z', '+00:00'))
@@ -185,13 +217,22 @@ def tick_routes(
     """
     Advance all active routes by processing completed legs.
 
-    For each active route:
-      - Compute elapsed seconds since legDepartedAt
-      - While elapsed >= transit_ticks * TICK_SECONDS:
-          1. Deliver this leg's cargo to the destination (best-effort)
-          2. Advance to next leg (wraps around)
-          3. Bump legDepartedAt by transit_secs (no drift)
-          4. Deduct next leg's cargo from its source (best-effort)
+    Delta loading rule (contiguous legs):
+      When leg[N].toPlanetId == leg[N+1].fromPlanetId the same colony acts as
+      both destination and next departure point. Instead of fully unloading then
+      fully reloading, compute the net delta per resource:
+        net = inbound_cargo[res] - outbound_cargo[res]
+        net > 0 → unload net units to colony
+        net < 0 → load |net| units from colony (best-effort)
+      Goods carried unchanged pass through without touching the stockpile.
+
+    Non-contiguous legs:
+      Full unload at destination, then full load from next leg's source
+      (best-effort for both).
+
+    Abandoned colonies:
+      If a leg's destination (or next source) is abandoned, add an event to
+      the route and pause it. A paused route does not advance.
 
     Returns (updated_routes_data, updated_colonies_data, changed).
     """
@@ -199,7 +240,7 @@ def tick_routes(
     colonies_data = copy.deepcopy(colonies_data)
     changed       = False
 
-    # Build quick lookup: planetId → colony dict (mutable, index into list)
+    # Build quick lookup: planetId → colony dict (mutable refs into list)
     col_index: dict[str, int] = {}
     for i, c in enumerate(colonies_data['colonies']):
         col_index[c['planetId']] = i
@@ -211,6 +252,7 @@ def tick_routes(
     now = datetime.now(tz=timezone.utc)
 
     for route in routes_data['routes']:
+        # Only active routes advance
         if route.get('status') != 'active':
             continue
 
@@ -226,52 +268,83 @@ def tick_routes(
         departed  = _parse_iso(route['legDepartedAt'])
         elapsed_s = (now - departed).total_seconds()
 
-        # Process as many completed legs as time allows
         while True:
-            leg     = legs[leg_idx % len(legs)]
-            from_id = leg['fromPlanetId']
-            to_id   = leg['toPlanetId']
+            current_leg  = legs[leg_idx % len(legs)]
+            to_id        = current_leg['toPlanetId']
 
-            from_col = get_col(from_id)
-            to_col   = get_col(to_id)
-            if from_col is None or to_col is None:
-                break
-
-            dist          = leg_distance(from_col, to_col, config, density_field)
+            dist          = _leg_dist_cached(current_leg, get_col, config, density_field)
             transit_ticks = leg_transit_ticks(dist, ship_id)
             transit_secs  = transit_ticks * TICK_SECONDS
 
             if elapsed_s < transit_secs:
                 break
 
-            # ── Deliver cargo to destination ───────────────────────────────
-            cargo = leg.get('cargo', {})
-            dest_stocks = to_col.setdefault('stockpiles', {})
-            for resource, amount in cargo.items():
-                dest_stocks[resource] = round(
-                    dest_stocks.get(resource, 0.0) + amount, 3
-                )
+            # ── Check destination ──────────────────────────────────────────
+            to_col = get_col(to_id)
+            if to_col is None or to_col.get('status') == 'abandoned':
+                _add_event(route, to_col, to_id, 'abandoned_transit')
+                changed = True
+                break
 
-            # ── Advance to next leg ────────────────────────────────────────
-            leg_idx = (leg_idx + 1) % len(legs)
-            departed = datetime.fromtimestamp(
+            next_idx  = (leg_idx + 1) % len(legs)
+            next_leg  = legs[next_idx]
+            next_from_id = next_leg['fromPlanetId']
+
+            if to_id == next_from_id:
+                # ── Delta (atomic) transaction ─────────────────────────────
+                curr    = current_leg.get('cargo', {})
+                nxt     = next_leg.get('cargo', {})
+                all_res = set(list(curr.keys()) + list(nxt.keys()))
+                stocks  = to_col.setdefault('stockpiles', {})
+                for res in all_res:
+                    net = curr.get(res, 0) - nxt.get(res, 0)
+                    if net > 0:
+                        stocks[res] = round(stocks.get(res, 0.0) + net, 3)
+                    elif net < 0:
+                        available   = stocks.get(res, 0.0)
+                        stocks[res] = round(available - min(available, -net), 3)
+            else:
+                # ── Non-contiguous: full unload, then full load at next source
+                stocks = to_col.setdefault('stockpiles', {})
+                for res, amt in current_leg.get('cargo', {}).items():
+                    stocks[res] = round(stocks.get(res, 0.0) + amt, 3)
+
+                next_col = get_col(next_from_id)
+                if next_col is None or next_col.get('status') == 'abandoned':
+                    _add_event(route, next_col, next_from_id, 'abandoned_transit')
+                    # Advance leg index before breaking (ship is in transit)
+                    leg_idx  = next_idx
+                    departed = datetime.fromtimestamp(
+                        departed.timestamp() + transit_secs, tz=timezone.utc
+                    )
+                    elapsed_s -= transit_secs
+                    changed = True
+                    break
+                else:
+                    src = next_col.setdefault('stockpiles', {})
+                    for res, amt in next_leg.get('cargo', {}).items():
+                        available = src.get(res, 0.0)
+                        src[res]  = round(available - min(available, amt), 3)
+
+            # ── Advance leg ────────────────────────────────────────────────
+            leg_idx   = next_idx
+            departed  = datetime.fromtimestamp(
                 departed.timestamp() + transit_secs, tz=timezone.utc
             )
             elapsed_s -= transit_secs
             changed = True
-
-            # ── Deduct next leg cargo from its source (best-effort) ────────
-            next_leg      = legs[leg_idx]
-            next_from_col = get_col(next_leg['fromPlanetId'])
-            if next_from_col is not None:
-                src_stocks = next_from_col.setdefault('stockpiles', {})
-                for resource, amount in next_leg.get('cargo', {}).items():
-                    available = src_stocks.get(resource, 0.0)
-                    deduct    = min(available, amount)
-                    src_stocks[resource] = round(available - deduct, 3)
 
         if changed:
             route['currentLegIndex'] = leg_idx
             route['legDepartedAt']   = departed.isoformat()
 
     return routes_data, colonies_data, changed
+
+
+def _leg_dist_cached(leg: dict, get_col, config, density_field) -> float:
+    """Compute distance for a single leg, returning inf if either colony is missing."""
+    from_col = get_col(leg['fromPlanetId'])
+    to_col   = get_col(leg['toPlanetId'])
+    if from_col is None or to_col is None:
+        return float('inf')
+    return leg_distance(from_col, to_col, config, density_field)

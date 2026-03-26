@@ -22,7 +22,8 @@ SIZE_MULT  = [0.5, 1.0, 2.0, 4.0, 8.0]
 DEV_NAMES  = ['Primitive', 'Industrial', 'Advanced', 'Sophisticated', 'Transcendent']
 DEV_MULT   = [1.0, 1.5, 2.5, 4.0, 6.0]
 
-GROWTH_TICKS_NEEDED = 10   # consecutive well-fed ticks required to grow
+GROWTH_TICKS_NEEDED  = 10   # consecutive well-fed ticks required to grow
+STARVE_TICKS_NEEDED  = 10   # consecutive under-consumption ticks → dev demote
 
 # Base per-tick consumption, scaled by size multiplier only
 BASE_CONSUMPTION: dict[str, float] = {
@@ -92,6 +93,9 @@ def migrate_colony(colony: dict) -> dict:
     colony.setdefault('size', 1)
     colony.setdefault('developmentLevel', 1)
     colony.setdefault('growthProgress', 0)
+    colony.setdefault('starvationTicks', 0)
+    colony.setdefault('status', 'active')        # 'active' | 'abandoned'
+    colony.setdefault('isHomeworld', False)
     colony.setdefault('lastTickedAt', _now_iso())
     colony.setdefault('stockpiles', {r: 0.0 for r in ALL_RESOURCES})
     # Ensure all resource keys exist in stockpiles
@@ -154,17 +158,44 @@ def apply_ticks(colony: dict, planet_yields: dict, n_ticks: int) -> dict:
     con = consumption_per_tick(colony)
 
     for _ in range(n_ticks):
+        # Abandoned colonies don't process ticks
+        if colony.get('status') == 'abandoned':
+            break
+
         # Extraction
         for k, v in ext.items():
             stockpiles[k] = round(stockpiles.get(k, 0.0) + v, 3)
 
-        # Consumption — check food + water satisfaction for growth
-        food_ok  = stockpiles.get('food',  0.0) >= con.get('food',  0.0)
-        water_ok = stockpiles.get('water', 0.0) >= con.get('water', 0.0)
+        # Consumption — check satisfaction before deducting
+        food_ok     = stockpiles.get('food',  0.0) >= con.get('food',  0.0)
+        water_ok    = stockpiles.get('water', 0.0) >= con.get('water', 0.0)
+        starving     = any(
+            stockpiles.get(k, 0.0) < v
+            for k, v in con.items() if v > 0
+        )
 
         for k, v in con.items():
             if v > 0:
                 stockpiles[k] = max(0.0, round(stockpiles.get(k, 0.0) - v, 3))
+
+        # Starvation tracking and demotion (homeworld is immune)
+        if starving:
+            colony['starvationTicks'] = colony.get('starvationTicks', 0) + 1
+        else:
+            colony['starvationTicks'] = 0
+
+        if (colony['starvationTicks'] >= STARVE_TICKS_NEEDED
+                and not colony.get('isHomeworld', False)):
+            dev = colony['developmentLevel']
+            colony['starvationTicks'] = 0
+            if dev > 1:
+                colony['developmentLevel'] -= 1
+                # Recalculate rates for demoted dev level
+                ext = extraction_per_tick(colony, planet_yields)
+                con = consumption_per_tick(colony)
+            else:
+                colony['status'] = 'abandoned'
+                break
 
         # Growth progress
         if food_ok and water_ok:

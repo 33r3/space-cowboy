@@ -59,6 +59,13 @@ export class RouteManager {
     await this.#fetch()
   }
 
+  /** Mark all events on a route as read. */
+  async markEventsRead(routeId) {
+    const encoded = encodeURIComponent(routeId)
+    await fetch(`/api/routes/${encoded}/events/read`, { method: 'POST' })
+    await this.#fetch()
+  }
+
   // ── Private ────────────────────────────────────────────────────────────────
 
   async #fetch() {

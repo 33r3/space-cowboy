@@ -104,14 +104,15 @@ def _enrich_colony(col: dict, planet: dict) -> dict:
     ok, _ = can_upgrade_dev(col)
     return {
         **col,
-        'planet':           planet,
-        'extractionPerTick': ext,
+        'planet':             planet,
+        'extractionPerTick':  ext,
         'consumptionPerTick': con,
-        'netFlowPerTick':   net,
-        'sizeName':         size_name(col),
-        'devName':          dev_name(col),
-        'canUpgradeDev':    ok,
-        'upgradeCost':      upgrade_cost(col),
+        'netFlowPerTick':     net,
+        'sizeName':           size_name(col),
+        'devName':            dev_name(col),
+        'canUpgradeDev':      ok,
+        'upgradeCost':        upgrade_cost(col),
+        'isAbandoned':        col.get('status') == 'abandoned',
     }
 
 
@@ -179,16 +180,17 @@ def api_homeworld():
     # Auto-found homeworld colony if not already present
     if not any(c['planetId'] == planet_id for c in data['colonies']):
         colony = migrate_colony({
-            'planetId':        planet_id,
-            'name':            result['planet']['name'],
-            'cx':              result['cx'],
-            'cy':              result['cy'],
-            'starIndex':       result['starIndex'],
-            'founded':         str(date.today()),
-            'size':            2,
+            'planetId':         planet_id,
+            'name':             result['planet']['name'],
+            'cx':               result['cx'],
+            'cy':               result['cy'],
+            'starIndex':        result['starIndex'],
+            'founded':          str(date.today()),
+            'size':             2,
             'developmentLevel': 2,
-            'lastTickedAt':    _now_iso(),
-            'stockpiles':      dict(STARTER_STOCKPILES),
+            'isHomeworld':      True,
+            'lastTickedAt':     _now_iso(),
+            'stockpiles':       dict(STARTER_STOCKPILES),
         })
         data['homeworld'] = {'planetId': planet_id}
         data['colonies'].append(colony)
@@ -570,6 +572,18 @@ def api_routes_delete(route_id: str):
         return jsonify({'error': 'route not found'}), 404
     _save_routes(routes_data)
     return jsonify({'ok': True})
+
+
+@app.route('/api/routes/<route_id>/events/read', methods=['POST'])
+def api_route_events_read(route_id: str):
+    routes_data = _load_routes()
+    for r in routes_data['routes']:
+        if r['routeId'] == route_id:
+            for e in r.get('events', []):
+                e['read'] = True
+            _save_routes(routes_data)
+            return jsonify({'ok': True})
+    return jsonify({'error': 'route not found'}), 404
 
 
 if __name__ == '__main__':

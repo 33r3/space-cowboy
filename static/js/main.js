@@ -106,6 +106,13 @@ function _renderColonySection(colony) {
   cpYieldsSection.style.display = 'none'
   cpFoundBtn.style.display      = 'none'
 
+  if (colony.isAbandoned) {
+    cpUpgradeBtn.disabled    = true
+    cpUpgradeBtn.textContent = 'Abandoned'
+    cpUpgradeCost.textContent = 'This colony has been abandoned due to starvation.'
+    // Still show the last stockpile and flow state for information
+  }
+
   // Size + growth
   const size = colony.size ?? 1
   cpSizeName.textContent = SIZE_NAMES[size - 1] ?? 'Outpost'
@@ -248,19 +255,21 @@ function openColonyPanel(planet, system) {
     starIndex: parseInt(parts[1]),
   }
 
-  const isHW     = colonyManager.isHomeworld(planet.id)
-  const isColony = colonyManager.isColony(planet.id)
+  const isHW       = colonyManager.isHomeworld(planet.id)
+  const isColony   = colonyManager.isColony(planet.id)
+  const col        = (isHW || isColony) ? colonyManager.getColony(planet.id) : null
+  const isAbandoned = col?.isAbandoned ?? false
 
   cpTitle.textContent   = planet.name
-  cpTitle.style.color   = isHW ? '#ffd700' : isColony ? '#44ffcc' : '#aaccee'
+  cpTitle.style.color   = isAbandoned ? '#cc4444' : isHW ? '#ffd700' : isColony ? '#44ffcc' : '#aaccee'
   cpSubtitle.textContent = `${planet.planetType}  ·  ${planet.semiMajorAxisAU.toFixed(2)} AU  ·  Hab ${planet.habitability.total}/100`
 
-  if (isHW)          cpStatus.innerHTML = '<span style="color:#ffd700;font-size:11px">★ Home World</span>'
+  if (isAbandoned)   cpStatus.innerHTML = '<span style="color:#cc4444;font-size:11px">☠ Abandoned</span>'
+  else if (isHW)     cpStatus.innerHTML = '<span style="color:#ffd700;font-size:11px">★ Home World</span>'
   else if (isColony) cpStatus.innerHTML = '<span style="color:#44ffcc;font-size:11px">■ Colony</span>'
   else               cpStatus.innerHTML = ''
 
   if (isHW || isColony) {
-    const col = colonyManager.getColony(planet.id)
     if (col) _renderColonySection(col)
     else     _renderYieldsSection(planet, _panelMeta)
   } else {
@@ -358,35 +367,62 @@ function _renderRouteList() {
     return
   }
   rpRouteList.innerHTML = routes.map(r => {
-    const leg = r.currentLeg
-    const pct = leg?.progressPct ?? 0
-    const legText = leg
-      ? `${leg.fromName} → ${leg.toName} (${pct.toFixed(0)}%)`
+    const leg      = r.currentLeg
+    const pct      = leg?.progressPct ?? 0
+    const legText  = leg ? `${leg.fromName} → ${leg.toName} (${pct.toFixed(0)}%)` : ''
+    const paused   = r.status === 'paused'
+    const events   = r.events ?? []
+    const unread   = events.filter(e => !e.read).length
+    const statusBadge = paused
+      ? `<span class="rp-paused-badge">⚠ paused</span>`
       : ''
+    const unreadBadge = (unread > 0 && !paused)
+      ? `<span class="rp-unread-badge">${unread}</span>`
+      : ''
+
+    const eventsHtml = events.length
+      ? `<div class="rp-events">${
+          events.slice(-3).reverse().map(e =>
+            `<div class="rp-event${e.read ? '' : ' unread'}">${e.message}</div>`
+          ).join('')
+        }</div>`
+      : ''
+
     return `<div class="rp-route-entry" data-id="${r.routeId}">
       <div class="rp-route-header">
-        <span class="rp-route-name">${r.name}</span>
+        <span class="rp-route-name">${r.name}${statusBadge}${unreadBadge}</span>
         <span class="rp-route-ship">${r.shipName ?? r.shipClass}</span>
         <button class="rp-cancel-btn" data-id="${r.routeId}">✕</button>
       </div>
-      ${leg ? `<div class="rp-leg-progress">
+      ${leg && !paused ? `<div class="rp-leg-progress">
         <span class="rp-leg-label">${legText}</span>
         <div class="rp-progress-bar">
           <div class="rp-progress-fill" style="width:${pct}%"></div>
         </div>
       </div>` : ''}
+      ${eventsHtml}
     </div>`
   }).join('')
 
   rpRouteList.querySelectorAll('.rp-cancel-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation()
-      const id = btn.dataset.id
       try {
-        await routeManager.deleteRoute(id)
+        await routeManager.deleteRoute(btn.dataset.id)
         _renderRouteList()
       } catch (err) {
         console.error('Delete route failed:', err.message)
+      }
+    })
+  })
+
+  // Clicking route entry marks events read
+  rpRouteList.querySelectorAll('.rp-route-entry').forEach(entry => {
+    entry.addEventListener('click', async () => {
+      const id = entry.dataset.id
+      const route = routeManager.routes.find(r => r.routeId === id)
+      if (route?.events?.some(e => !e.read)) {
+        await routeManager.markEventsRead(id)
       }
     })
   })
