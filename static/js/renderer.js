@@ -5,14 +5,15 @@ import { SystemRenderer } from './system_renderer.js'
 const SYSTEM_ZOOM_THRESHOLD = 1.5
 
 export class Renderer {
-  constructor(ctx, camera, galaxyClient) {
+  constructor(ctx, camera, galaxyClient, colonyManager = null) {
     this.ctx          = ctx
     this.camera       = camera
     this.galaxyClient = galaxyClient
 
-    this._starRenderer  = new StarRenderer(ctx)
-    this._debugRenderer = new ChunkDebugRenderer(ctx)
+    this._starRenderer   = new StarRenderer(ctx)
+    this._debugRenderer  = new ChunkDebugRenderer(ctx)
     this._systemRenderer = new SystemRenderer(ctx)
+    this._systemRenderer.colonyManager = colonyManager
 
     this.showDebug = false
     this.mouseX    = -1000
@@ -20,6 +21,8 @@ export class Renderer {
 
     this._hoveredPlanet = null
   }
+
+  get hoveredPlanet() { return this._hoveredPlanet }
 
   render(canvasW, canvasH, ship, _starCount) {
     const ctx    = this.ctx

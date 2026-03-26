@@ -36,6 +36,7 @@ export class SystemRenderer {
   constructor(ctx) {
     this.ctx = ctx
     this._hoveredPlanetId = null
+    this.colonyManager = null
   }
 
   render(system, camera, canvasW, canvasH) {
@@ -131,6 +132,23 @@ export class SystemRenderer {
       ctx.fill()
     }
 
+    // ── Colony / homeworld rings ─────────────────────────────────────────────
+    if (this.colonyManager) {
+      if (this.colonyManager.isHomeworld(planet.id)) {
+        ctx.beginPath()
+        ctx.arc(sx, sy, radius + 4, 0, TWO_PI)
+        ctx.strokeStyle = '#ffd700'
+        ctx.lineWidth   = 2
+        ctx.stroke()
+      } else if (this.colonyManager.isColony(planet.id)) {
+        ctx.beginPath()
+        ctx.arc(sx, sy, radius + 3, 0, TWO_PI)
+        ctx.strokeStyle = '#44ffcc'
+        ctx.lineWidth   = 1.5
+        ctx.stroke()
+      }
+    }
+
     if (camera.zoom > 8) {
       ctx.font = `${Math.max(9, Math.min(12, camera.zoom * 0.4))}px "Courier New", monospace`
       ctx.fillStyle = 'rgba(160, 190, 220, 0.75)'
@@ -161,11 +179,13 @@ export class SystemRenderer {
 
   renderTooltip(planet, mouseX, mouseY, canvasW, canvasH) {
     const ctx   = this.ctx
-    const lines = buildTooltipLines(planet)
+    const isHomeworld = this.colonyManager?.isHomeworld(planet.id) ?? false
+    const isColony    = this.colonyManager?.isColony(planet.id)    ?? false
+    const lines = buildTooltipLines(planet, isHomeworld, isColony)
 
     const lineH   = 15
     const padding = 10
-    const w       = 220
+    const w       = 230
     const h       = lines.length * lineH + padding * 2
 
     let tx = mouseX + 16
@@ -224,13 +244,31 @@ const LIFE_DESC = {
   [LifeStage.ComplexLife]:        'Complex life',
 }
 
-function buildTooltipLines(p) {
-  const H = '#aaccee'
-  const V = '#88aacc'
-  const D = '#556677'
-  const G = '#66cc88'
-  const W = '#cc8844'
-  const R = '#cc4422'
+const YIELD_LABELS = {
+  food:           'Food      ',
+  water:          'Water     ',
+  organicFuels:   'Org.Fuels ',
+  chemFeedstocks: 'Chem.Feed ',
+  minerals:       'Minerals  ',
+  fusionFuel:     'Fusion    ',
+  metals:         'Metals    ',
+  radioactives:   'Radioact. ',
+}
+
+function _yieldBar(v) {
+  const filled = Math.round(v * 5)
+  return '\u2588'.repeat(filled) + '\u2591'.repeat(5 - filled) + ` ${v.toFixed(2)}`
+}
+
+function buildTooltipLines(p, isHomeworld, isColony) {
+  const H  = '#aaccee'
+  const V  = '#88aacc'
+  const D  = '#556677'
+  const G  = '#66cc88'
+  const W  = '#cc8844'
+  const R  = '#cc4422'
+  const GD = '#ffd700'
+  const CY = '#44ffcc'
 
   const hab = p.habitability
   const habColor = hab.total >= 66 ? G : hab.total >= 46 ? V : hab.total >= 26 ? W : R
@@ -238,9 +276,15 @@ function buildTooltipLines(p) {
   const tempC   = Math.round(p.surfaceTempK - 273)
   const tempStr = `${p.surfaceTempK} K (${tempC > 0 ? '+' : ''}${tempC}\u00b0C)`
 
-  return [
-    { text: p.name, color: H },
+  const lines = [
+    { text: p.name, color: isHomeworld ? GD : isColony ? CY : H },
     { text: `${p.planetType}  \u00b7  ${p.semiMajorAxisAU.toFixed(2)} AU`, color: D },
+  ]
+
+  if (isHomeworld) lines.push({ text: '\u2605 Home World', color: GD })
+  else if (isColony) lines.push({ text: '\u25a0 Colony', color: CY })
+
+  lines.push(
     { text: '', color: D },
     { text: `Habitability: ${hab.total}/100 \u2014 ${hab.category}`, color: habColor },
     { text: '', color: D },
@@ -251,5 +295,20 @@ function buildTooltipLines(p) {
     { text: `Life:    ${LIFE_DESC[p.biosphere.stage]}`, color: p.biosphere.stage !== LifeStage.None ? G : D },
     { text: '', color: D },
     { text: `Tectonic: ${Math.round(p.lithosphere.tectonicActivity * 100)}%  Magnetic: ${Math.round(p.lithosphere.magneticField * 100)}%`, color: D },
-  ]
+  )
+
+  // Colony yields — show all non-zero resources
+  const yields = p.colonyYields
+  if (yields) {
+    const nonZero = Object.entries(yields).filter(([, v]) => v > 0)
+    if (nonZero.length > 0) {
+      lines.push({ text: '', color: D })
+      lines.push({ text: 'COLONY YIELDS', color: isHomeworld ? GD : isColony ? CY : V })
+      for (const [key, val] of nonZero) {
+        lines.push({ text: `${YIELD_LABELS[key] ?? key}${_yieldBar(val)}`, color: V })
+      }
+    }
+  }
+
+  return lines
 }

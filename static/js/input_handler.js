@@ -19,6 +19,7 @@ export class InputHandler {
 
     this.onDebugToggle = null
     this.onCameraReset = null
+    this.onCanvasClick = null   // fired with {clientX, clientY} on non-drag left click
 
     this._onMouseDown = (e) => {
       if (e.button !== 0) return
@@ -48,6 +49,7 @@ export class InputHandler {
       this._isDragging = false
 
       if (!this._hasDragged && e.button === 0) {
+        this.onCanvasClick?.({ clientX: e.clientX, clientY: e.clientY })
         const { wx, wy } = this.camera.screenToWorld(
           e.clientX, e.clientY, this.viewport.width, this.viewport.height,
         )

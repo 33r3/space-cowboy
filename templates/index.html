@@ -47,6 +47,76 @@
         user-select: none;
         line-height: 1.8;
       }
+      #colony-panel {
+        display: none;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(6, 12, 22, 0.96);
+        border: 1px solid rgba(80, 120, 180, 0.5);
+        border-radius: 6px;
+        padding: 18px 22px;
+        color: #88aacc;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        min-width: 260px;
+        max-width: 320px;
+        z-index: 100;
+      }
+      #colony-panel-title {
+        color: #aaccee;
+        font-size: 14px;
+        margin-bottom: 4px;
+      }
+      #colony-panel-subtitle {
+        color: #556677;
+        font-size: 11px;
+        margin-bottom: 12px;
+      }
+      #colony-panel-status {
+        margin-bottom: 12px;
+        font-size: 11px;
+        line-height: 1.7;
+      }
+      #colony-panel-yields {
+        margin-bottom: 14px;
+        font-size: 11px;
+        line-height: 1.8;
+        color: #88aacc;
+      }
+      #colony-panel-yields .yields-header {
+        color: #6699bb;
+        margin-bottom: 4px;
+      }
+      .colony-panel-buttons {
+        display: flex;
+        gap: 8px;
+      }
+      .colony-panel-buttons button {
+        background: rgba(40, 70, 110, 0.7);
+        border: 1px solid rgba(80, 130, 190, 0.5);
+        color: #88aacc;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        padding: 5px 12px;
+        border-radius: 3px;
+        cursor: pointer;
+      }
+      .colony-panel-buttons button:hover {
+        background: rgba(60, 100, 150, 0.8);
+        color: #aaccee;
+      }
+      #colony-panel-found {
+        flex: 1;
+        color: #66cc88 !important;
+        border-color: rgba(60, 160, 100, 0.5) !important;
+      }
+      #colony-panel-found:disabled {
+        color: #445566 !important;
+        border-color: rgba(40, 70, 60, 0.4) !important;
+        cursor: default;
+      }
     </style>
   </head>
   <body>
@@ -64,6 +134,16 @@
       <div>click — move ship</div>
       <div>D — toggle debug overlay</div>
       <div>R — reset camera to ship</div>
+    </div>
+    <div id="colony-panel">
+      <div id="colony-panel-title"></div>
+      <div id="colony-panel-subtitle"></div>
+      <div id="colony-panel-status"></div>
+      <div id="colony-panel-yields"></div>
+      <div class="colony-panel-buttons">
+        <button id="colony-panel-found">Found Colony</button>
+        <button id="colony-panel-close">Close</button>
+      </div>
     </div>
     <script type="module" src="/static/js/main.js"></script>
   </body>

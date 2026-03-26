@@ -457,6 +457,87 @@ def _generate_resources(prng: PRNG, planet_type: str, litho: dict, bio: dict) ->
         'organics': organics, 'exotics': exotics,
     }
 
+# ── Colony resource yields ────────────────────────────────────────────────────
+
+_MINERAL_TYPES = (ARID, VOLCANIC, DESERT, BARREN, LAVA_PLANET)
+_GAS_FUEL_TYPES = (GAS_GIANT, HOT_JUPITER)
+_FOOD_TYPES = (TERRAN, OCEANIC)
+
+_FOOD_BY_STAGE = {
+    LIFE_NONE: 0.0,
+    LIFE_PREBIOTIC: 0.0,
+    LIFE_MICROBIAL: 0.1,
+    LIFE_SIMPLE_MULTI: 0.5,
+    LIFE_COMPLEX: 1.0,
+}
+
+
+def colony_resource_yields(planet: dict) -> dict:
+    """
+    Derive economic resource yields for a colony on this planet.
+    Uses data already present in the planet dict — no new RNG calls.
+    All values are floats 0–1.
+    """
+    pt    = planet['planetType']
+    bio   = planet['biosphere']
+    hydro = planet['hydrosphere']
+    res   = planet['resources']
+
+    # Food: biological worlds with established life
+    if pt in _FOOD_TYPES:
+        food = _FOOD_BY_STAGE.get(bio['stage'], 0.0) * bio['coverage']
+    else:
+        food = 0.0
+
+    # Water: liquid/mixed worlds full value; ice worlds need processing
+    state = hydro['state']
+    if state in (WATER_LIQUID, WATER_MIXED):
+        water = hydro['waterCoverage'] * hydro['liquidFraction']
+    elif state == WATER_ICE:
+        water = hydro['iceCoverage'] * 0.3
+    else:
+        water = 0.0
+
+    # Organic fuels and chemical feedstocks: carbon worlds are primary source
+    org_ab = res['organics']['abundance']
+    if pt == CARBON_WORLD:
+        organic_fuels   = org_ab * 0.8
+        chem_feedstocks = org_ab * 0.6
+    else:
+        organic_fuels   = org_ab * 0.3
+        chem_feedstocks = 0.0
+
+    # Minerals: rocky dry/volcanic worlds
+    if pt in _MINERAL_TYPES:
+        minerals = (res['metals']['abundance'] * 0.7
+                    + res['rareEarths']['abundance'] * 0.5)
+    else:
+        minerals = 0.0
+
+    # Fusion fuel: gas giants and ice giants (volatiles rich in H₂/He)
+    vol_ab = res['volatiles']['abundance']
+    if pt in _GAS_FUEL_TYPES:
+        fusion_fuel = vol_ab
+    elif pt == ICE_GIANT:
+        fusion_fuel = vol_ab * 0.6
+    else:
+        fusion_fuel = 0.0
+
+    metals       = res['metals']['abundance']       * res['metals']['accessibility']
+    radioactives = res['radioactives']['abundance'] * res['radioactives']['accessibility']
+
+    return {
+        'food':           round(min(food, 1.0),           2),
+        'water':          round(min(water, 1.0),          2),
+        'organicFuels':   round(min(organic_fuels, 1.0),  2),
+        'chemFeedstocks': round(min(chem_feedstocks, 1.0),2),
+        'minerals':       round(min(minerals, 1.0),       2),
+        'fusionFuel':     round(min(fusion_fuel, 1.0),    2),
+        'metals':         round(min(metals, 1.0),         2),
+        'radioactives':   round(min(radioactives, 1.0),   2),
+    }
+
+
 # ── Planet type selection ─────────────────────────────────────────────────────
 
 def _select_planet_type(prng: PRNG, t_eq: float, semi_major_au: float, star: dict) -> str:
@@ -562,6 +643,12 @@ def generate_system(star: dict) -> dict:
             'biosphere':    bio,
             'habitability': habitability,
             'resources':    resources,
+            'colonyYields': colony_resource_yields({
+                'planetType': planet_type,
+                'biosphere':  bio,
+                'hydrosphere': hydro,
+                'resources':  resources,
+            }),
             'terraforming': {
                 'pressureDeltaAtm':  0,
                 'temperatureDeltaK': 0,
