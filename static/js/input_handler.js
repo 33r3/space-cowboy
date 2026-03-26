@@ -126,6 +126,9 @@ export class InputHandler {
       if (e.key.toLowerCase() === 't') {
         this.onRoutesToggle?.()
       }
+      if (e.key.toLowerCase() === 'l') {
+        this.onColonyListToggle?.()
+      }
       if (e.key === 'Escape') {
         this.ship.clearWaypoints()
       }

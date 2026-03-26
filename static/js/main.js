@@ -61,6 +61,13 @@ input.onRoutesToggle = () => {
     closeRoutesPanel()
   }
 }
+input.onColonyListToggle = () => {
+  if (colonyListPanel?.style.display === 'none' || !colonyListPanel?.style.display) {
+    openColonyListPanel()
+  } else {
+    closeColonyListPanel()
+  }
+}
 
 // ── Colony panel ──────────────────────────────────────────────────────────────
 
@@ -315,6 +322,7 @@ function openColonyPanel(planet, system) {
 
 // Refresh panel if it's open and colony data was updated by polling
 colonyManager.onUpdate = () => {
+  if (colonyListPanel?.style.display !== 'none') _renderColonyList()
   if (colonyPanel.style.display === 'none' || !_panelPlanet) return
   const col = colonyManager.getColony(_panelPlanet.id)
   if (!col) {
@@ -389,6 +397,78 @@ cpUpgradeBtn.addEventListener('click', async () => {
     cpStatus.innerHTML = `<span style="color:#cc4444;font-size:10px">${err.message}</span>`
   }
 })
+
+// ── Colony list panel ─────────────────────────────────────────────────────────
+
+const colonyListPanel = document.getElementById('colony-list-panel')
+const clCloseBtn      = document.getElementById('cl-close-btn')
+const clList          = document.getElementById('cl-list')
+
+const SIZE_NAMES_SHORT = ['Outpost', 'Settlement', 'Town', 'City', 'Megacity']
+
+function _renderColonyList() {
+  const all = colonyManager.colonies
+  if (!all.length) {
+    clList.innerHTML = '<div class="cl-empty">No colonies founded yet.</div>'
+    return
+  }
+  clList.innerHTML = all.map(col => {
+    const isHW       = colonyManager.isHomeworld(col.planetId)
+    const isTransit  = col.status === 'in_transit'
+    const isAbandoned = col.isAbandoned || col.status === 'abandoned'
+
+    let icon, color
+    if (isHW)          { icon = '★'; color = '#ffd700' }
+    else if (isAbandoned) { icon = '☠'; color = '#cc4444' }
+    else if (isTransit)   { icon = '▶'; color = '#ffaa44' }
+    else                   { icon = '■'; color = '#44ffcc' }
+
+    let detail
+    if (isAbandoned) {
+      detail = 'Abandoned'
+    } else if (isTransit) {
+      const pct = (col.transitProgressPct ?? 0).toFixed(0)
+      const eta = Math.ceil(col.ticksRemaining ?? 0)
+      detail = `In Transit · ${pct}% · ~${eta} min`
+    } else {
+      const sz  = SIZE_NAMES_SHORT[(col.size ?? 1) - 1] ?? 'Outpost'
+      const dev = col.developmentLevel ?? 1
+      detail = `${sz} · Dev ${dev}`
+    }
+
+    return `<div class="cl-entry">
+      <div class="cl-icon" style="color:${color}">${icon}</div>
+      <div class="cl-info">
+        <div class="cl-name" style="color:${color}">${col.name}</div>
+        <div class="cl-detail">${detail}</div>
+      </div>
+      <button class="cl-zoom-btn" data-pid="${col.planetId}">→</button>
+    </div>`
+  }).join('')
+
+  clList.querySelectorAll('.cl-zoom-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const col = colonyManager.getColony(btn.dataset.pid)
+      if (!col?.planet) return
+      camera.worldX = col.planet.worldX
+      camera.worldY = col.planet.worldY
+      if (camera.zoom < 2) camera.zoom = 2
+    })
+  })
+}
+
+function openColonyListPanel() {
+  if (!colonyListPanel) return
+  closeRoutesPanel()
+  _renderColonyList()
+  colonyListPanel.style.display = 'block'
+}
+
+function closeColonyListPanel() {
+  if (colonyListPanel) colonyListPanel.style.display = 'none'
+}
+
+clCloseBtn?.addEventListener('click', closeColonyListPanel)
 
 // ── Routes panel ──────────────────────────────────────────────────────────────
 
@@ -657,6 +737,7 @@ rpCancel?.addEventListener('click', _closeBuilder)
 
 function openRoutesPanel() {
   if (!routesPanel) return
+  closeColonyListPanel()
   _renderRouteList()
   routesPanel.style.display = 'block'
 }
