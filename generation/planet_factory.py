@@ -486,7 +486,7 @@ def _select_planet_type(prng: PRNG, t_eq: float, semi_major_au: float, star: dic
 
     if t_eq > 200:
         r = prng.next()
-        if r < 0.25: return TUNDRA
+        if r < 0.25: return TUNDRA if t_eq < 260 else ARID
         if r < 0.45: return ARID
         if r < 0.60: return DESERT
         if r < 0.75: return SUPER_EARTH
