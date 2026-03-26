@@ -159,9 +159,11 @@ function _renderColonySection(colony) {
   }
 }
 
-function _renderYieldsSection(planet) {
+function _renderYieldsSection(planet, meta) {
   cpColonySection.style.display = 'none'
-  const yields = planet.colonyYields ?? {}
+
+  // Potential yields
+  const yields  = planet.colonyYields ?? {}
   const nonZero = Object.entries(yields).filter(([, v]) => v > 0)
   if (nonZero.length > 0) {
     cpYieldsSection.style.display = 'block'
@@ -176,9 +178,49 @@ function _renderYieldsSection(planet) {
   } else {
     cpYieldsSection.style.display = 'none'
   }
+
+  // Colonization eligibility — fetch preview async, show loading state
   cpFoundBtn.style.display = 'block'
-  cpFoundBtn.disabled      = false
-  cpFoundBtn.textContent   = 'Found Colony'
+  cpFoundBtn.disabled      = true
+  cpFoundBtn.textContent   = 'Checking...'
+  cpStatus.innerHTML       = ''
+
+  if (meta) {
+    colonyManager.getColonizationPreview(meta.cx, meta.cy, meta.starIndex, planet.index)
+      .then(preview => {
+        if (preview.eligible) {
+          const cost     = preview.cost ?? {}
+          const costStr  = Object.entries(cost)
+            .map(([k, v]) => `${v} ${RES_LABELS[k] ?? k}`)
+            .join(' · ')
+          const src      = preview.sourceColony
+          const affordColor = preview.canAfford ? '#66cc88' : '#cc4444'
+          const affordText  = preview.canAfford ? 'affordable' : 'INSUFFICIENT FUNDS'
+          cpStatus.innerHTML =
+            `<div style="font-size:10px;line-height:1.9;color:#556677">` +
+            `Source: <span style="color:#88aacc">${src.name}</span>` +
+            ` <span style="color:#334455">(${src.devName})</span>` +
+            `  <span style="color:#334455">${preview.distance} Ly / ${preview.maxRange} Ly max</span><br>` +
+            `Cost: <span style="color:#88aacc">${costStr}</span><br>` +
+            `<span style="color:${affordColor}">${affordText}</span>` +
+            `</div>`
+          cpFoundBtn.disabled    = !preview.canAfford
+          cpFoundBtn.textContent = 'Found Colony'
+        } else {
+          cpStatus.innerHTML =
+            `<div style="font-size:10px;color:#cc4444">${preview.reason ?? 'Cannot colonize'}</div>`
+          cpFoundBtn.disabled    = true
+          cpFoundBtn.textContent = 'Found Colony'
+        }
+      })
+      .catch(() => {
+        cpFoundBtn.disabled    = true
+        cpFoundBtn.textContent = 'Found Colony'
+      })
+  } else {
+    cpFoundBtn.disabled    = true
+    cpFoundBtn.textContent = 'Found Colony'
+  }
 }
 
 function openColonyPanel(planet, system) {
@@ -207,9 +249,9 @@ function openColonyPanel(planet, system) {
   if (isHW || isColony) {
     const col = colonyManager.getColony(planet.id)
     if (col) _renderColonySection(col)
-    else     _renderYieldsSection(planet)
+    else     _renderYieldsSection(planet, _panelMeta)
   } else {
-    _renderYieldsSection(planet)
+    _renderYieldsSection(planet, _panelMeta)
   }
 
   colonyPanel.style.display = 'block'
@@ -219,7 +261,12 @@ function openColonyPanel(planet, system) {
 colonyManager.onUpdate = () => {
   if (colonyPanel.style.display === 'none' || !_panelPlanet) return
   const col = colonyManager.getColony(_panelPlanet.id)
-  if (col) _renderColonySection(col)
+  if (col) {
+    _renderColonySection(col)
+  } else {
+    // Re-check colonization eligibility in case source stockpiles changed
+    _renderYieldsSection(_panelPlanet, _panelMeta)
+  }
 }
 
 input.onCanvasClick = () => {

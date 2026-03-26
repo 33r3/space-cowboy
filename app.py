@@ -1,4 +1,5 @@
 import json
+import math
 import os
 from datetime import date, datetime, timezone
 
@@ -9,9 +10,11 @@ from generation.chunk_generator import generate_chunk, chunks_in_bounds, regener
 from generation.planet_factory import generate_system
 from generation.homeworld import find_homeworld
 from generation.colony_economics import (
-    STARTER_STOCKPILES, migrate_colony, apply_ticks, pending_ticks,
+    STARTER_STOCKPILES, MIN_DEV_TO_COLONIZE,
+    migrate_colony, apply_ticks, pending_ticks,
     extraction_per_tick, consumption_per_tick, net_flow_per_tick,
     can_upgrade_dev, apply_upgrade_dev, size_name, dev_name, upgrade_cost,
+    colonization_cost, colonization_range,
 )
 
 app = Flask(__name__)
@@ -48,6 +51,29 @@ def _get_planet(cx: int, cy: int, star_index: int, planet_id: str):
     system  = generate_system(star)
     planets = {p['id']: p for p in system['planets']}
     return system, planets.get(planet_id)
+
+
+def _star_position(colony: dict) -> tuple[float, float] | None:
+    """Return (worldX, worldY) of a colony's star (uses chunk cache)."""
+    star = regenerate_star(colony['cx'], colony['cy'], colony['starIndex'], config, density_field)
+    return (star['worldX'], star['worldY']) if star else None
+
+
+def _find_source_colony(data: dict, target_x: float, target_y: float):
+    """Return (colony_dict, distance_ly) of the nearest dev-3+ colony within range, or None."""
+    best_col, best_dist = None, float('inf')
+    for col in data['colonies']:
+        col = migrate_colony(col)
+        if col['developmentLevel'] < MIN_DEV_TO_COLONIZE:
+            continue
+        pos = _star_position(col)
+        if pos is None:
+            continue
+        dist = math.sqrt((pos[0] - target_x) ** 2 + (pos[1] - target_y) ** 2)
+        max_range = colonization_range(col['developmentLevel'])
+        if dist <= max_range and dist < best_dist:
+            best_col, best_dist = col, dist
+    return (best_col, best_dist) if best_col else None
 
 
 def _enrich_colony(col: dict, planet: dict) -> dict:
@@ -188,6 +214,64 @@ def api_colonies_get():
     return jsonify({'homeworld': data.get('homeworld'), 'colonies': enriched})
 
 
+@app.route('/api/colonization-preview')
+def api_colonization_preview():
+    try:
+        cx           = int(request.args['cx'])
+        cy           = int(request.args['cy'])
+        star_index   = int(request.args['starIndex'])
+        planet_index = int(request.args['planetIndex'])
+    except (KeyError, ValueError):
+        return jsonify({'error': 'cx, cy, starIndex, planetIndex required'}), 400
+
+    star = regenerate_star(cx, cy, star_index, config, density_field)
+    if star is None:
+        return jsonify({'error': 'star not found'}), 404
+
+    system = generate_system(star)
+    if planet_index < 0 or planet_index >= len(system['planets']):
+        return jsonify({'error': 'planet not found'}), 404
+
+    planet   = system['planets'][planet_index]
+    target_x = star['worldX']
+    target_y = star['worldY']
+
+    data   = _load_colonies()
+    result = _find_source_colony(data, target_x, target_y)
+
+    if result is None:
+        dev_name_needed = 'Advanced'   # DEV_NAMES[MIN_DEV_TO_COLONIZE - 1]
+        return jsonify({
+            'eligible': False,
+            'reason':   f'no {dev_name_needed} (dev {MIN_DEV_TO_COLONIZE}+) colony within range',
+        })
+
+    source_col, distance = result
+    hab   = planet['habitability']['total']
+    cost  = colonization_cost(hab)
+
+    can_afford = all(
+        source_col['stockpiles'].get(k, 0.0) >= v
+        for k, v in cost.items()
+    )
+
+    return jsonify({
+        'eligible':    True,
+        'cost':        cost,
+        'canAfford':   can_afford,
+        'distance':    round(distance, 1),
+        'maxRange':    colonization_range(source_col['developmentLevel']),
+        'sourceColony': {
+            'planetId':         source_col['planetId'],
+            'name':             source_col['name'],
+            'sizeName':         size_name(source_col),
+            'devName':          dev_name(source_col),
+            'developmentLevel': source_col['developmentLevel'],
+            'stockpiles':       source_col['stockpiles'],
+        },
+    })
+
+
 @app.route('/api/colonies', methods=['POST'])
 def api_colonies_post():
     body = request.get_json(force=True) or {}
@@ -215,6 +299,39 @@ def api_colonies_post():
     if any(c['planetId'] == planet_id for c in data['colonies']):
         return jsonify({'error': 'colony already exists', 'planetId': planet_id}), 409
 
+    # ── Colonization constraints ───────────────────────────────────────────────
+    target_x = star['worldX']
+    target_y = star['worldY']
+    result   = _find_source_colony(data, target_x, target_y)
+
+    if result is None:
+        return jsonify({
+            'error': f'no Advanced (dev {MIN_DEV_TO_COLONIZE}+) colony within range'
+        }), 403
+
+    source_col, _distance = result
+    hab  = planet['habitability']['total']
+    cost = colonization_cost(hab)
+
+    for resource, amount in cost.items():
+        if source_col['stockpiles'].get(resource, 0.0) < amount:
+            return jsonify({
+                'error': f'insufficient {resource} in source colony '
+                         f'(need {amount}, have {source_col["stockpiles"].get(resource, 0.0):.1f})'
+            }), 400
+
+    # Deduct cost from source colony
+    for resource, amount in cost.items():
+        source_col['stockpiles'][resource] = round(
+            source_col['stockpiles'].get(resource, 0.0) - amount, 1
+        )
+
+    # Write updated source colony back
+    data['colonies'] = [
+        source_col if c['planetId'] == source_col['planetId'] else c
+        for c in data['colonies']
+    ]
+    # ── Create new colony ──────────────────────────────────────────────────────
     colony = migrate_colony({
         'planetId':   planet_id,
         'name':       planet['name'],

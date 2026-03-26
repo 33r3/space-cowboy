@@ -56,6 +56,34 @@ STARTER_STOCKPILES = {
     'organicFuels': 0.0, 'chemFeedstocks': 0.0, 'fusionFuel': 0.0, 'radioactives': 0.0,
 }
 
+# ── Colonization constraints ──────────────────────────────────────────────────
+
+MIN_DEV_TO_COLONIZE = 3   # source colony must be at least Advanced
+
+COLONIZATION_RANGE_LY: dict[int, float] = {
+    3: 300.0,   # Advanced
+    4: 600.0,   # Sophisticated
+    5: 1200.0,  # Transcendent
+}
+
+COLONIZATION_BASE_COST: dict[str, float] = {
+    'metals': 50.0,
+    'food':   25.0,
+    'water':  15.0,
+}
+
+
+def colonization_cost(target_habitability: int) -> dict[str, float]:
+    """Scale base colonization cost by difficulty of the target world.
+    Lower habitability → higher cost (hostile worlds require more investment)."""
+    mult = 100 / max(1, target_habitability)
+    return {k: round(v * mult, 1) for k, v in COLONIZATION_BASE_COST.items()}
+
+
+def colonization_range(source_dev_level: int) -> float:
+    """Max colonization range in light-years for a given source dev level."""
+    return COLONIZATION_RANGE_LY.get(source_dev_level, 0.0)
+
 # ── Migration ─────────────────────────────────────────────────────────────────
 
 def migrate_colony(colony: dict) -> dict:

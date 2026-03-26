@@ -75,6 +75,15 @@ export class ColonyManager {
     return updated
   }
 
+  /**
+   * Check whether a planet can be colonized and at what cost.
+   * Returns the API response object (eligible true/false + details).
+   */
+  async getColonizationPreview(cx, cy, starIndex, planetIndex) {
+    const params = new URLSearchParams({ cx, cy, starIndex, planetIndex })
+    return fetch(`/api/colonization-preview?${params}`).then(r => r.json())
+  }
+
   // ── Private fetch helpers ──────────────────────────────────────────────────
 
   async #fetchHomeworld() {
