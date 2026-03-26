@@ -5,11 +5,14 @@ import type { ChunkCoord, WorldBounds } from './ChunkCoord'
 import type { StarData } from '../stars/StarProperties'
 import type { GalaxyConfig } from './GalaxyConfig'
 import type { GeneratedChunk } from './ChunkGenerator'
+import { generateSystem } from '../planets/PlanetFactory'
+import type { SystemData } from '../planets/PlanetData'
 
 export class GalaxyManager {
   private config: GalaxyConfig
   private registry: ChunkRegistry
   private generator: ChunkGenerator
+  private systemCache = new Map<string, SystemData>()
 
   constructor(config: GalaxyConfig, registry: ChunkRegistry, generator: ChunkGenerator) {
     this.config = config
@@ -73,6 +76,27 @@ export class GalaxyManager {
 
   getAllGeneratedChunks(): GeneratedChunk[] {
     return Array.from(this.registry.values())
+  }
+
+  /**
+   * Returns the planetary system for a star, generating it lazily on first call.
+   * Results are cached for the session.
+   */
+  getSystem(star: StarData): SystemData {
+    const cached = this.systemCache.get(star.id)
+    if (cached) return cached
+    const system = generateSystem(star)
+    this.systemCache.set(star.id, system)
+    return system
+  }
+
+  /**
+   * Returns all systems whose stars are visible in `bounds`.
+   * Only generates systems for stars already in memory.
+   */
+  getSystemsInViewport(bounds: WorldBounds): SystemData[] {
+    const stars = this.getStarsInViewport(bounds)
+    return stars.map(s => this.getSystem(s))
   }
 
   get chunkSizeLy(): number {

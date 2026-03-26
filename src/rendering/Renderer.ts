@@ -1,8 +1,13 @@
 import type { Camera } from './Camera'
 import { StarRenderer } from './StarRenderer'
 import { ChunkDebugRenderer } from './ChunkDebugRenderer'
+import { SystemRenderer } from './SystemRenderer'
 import type { GalaxyManager } from '../galaxy/GalaxyManager'
 import type { Ship } from '../exploration/Ship'
+import type { PlanetData } from '../planets/PlanetData'
+
+// Zoom threshold above which we render planetary systems
+const SYSTEM_ZOOM_THRESHOLD = 1.5
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D
@@ -10,19 +15,27 @@ export class Renderer {
   private galaxyManager: GalaxyManager
   private starRenderer: StarRenderer
   private debugRenderer: ChunkDebugRenderer
+  private systemRenderer: SystemRenderer
 
   showDebug = false
+
+  // Mouse position for planet hover detection (updated externally)
+  mouseX = -1000
+  mouseY = -1000
+
+  private hoveredPlanet: PlanetData | null = null
 
   constructor(ctx: CanvasRenderingContext2D, camera: Camera, galaxyManager: GalaxyManager) {
     this.ctx = ctx
     this.camera = camera
     this.galaxyManager = galaxyManager
-    this.starRenderer = new StarRenderer(ctx)
-    this.debugRenderer = new ChunkDebugRenderer(ctx)
+    this.starRenderer    = new StarRenderer(ctx)
+    this.debugRenderer   = new ChunkDebugRenderer(ctx)
+    this.systemRenderer  = new SystemRenderer(ctx)
   }
 
-  render(canvasW: number, canvasH: number, ship: Ship, starCount: number): void {
-    const ctx = this.ctx
+  render(canvasW: number, canvasH: number, ship: Ship, _starCount: number): void {
+    const ctx    = this.ctx
     const camera = this.camera
 
     // ── Background ──────────────────────────────────────────────────────────
@@ -34,8 +47,23 @@ export class Renderer {
       this.debugRenderer.render(this.galaxyManager, camera, canvasW, canvasH)
     }
 
-    // ── Stars ───────────────────────────────────────────────────────────────
     const bounds = camera.getViewportBounds(canvasW, canvasH)
+
+    // ── Planetary systems (orbit rings, planets) ─────────────────────────────
+    if (camera.zoom >= SYSTEM_ZOOM_THRESHOLD) {
+      const systems = this.galaxyManager.getSystemsInViewport(bounds)
+      for (const system of systems) {
+        this.systemRenderer.render(system, camera, canvasW, canvasH)
+      }
+      // Update hover detection
+      this.hoveredPlanet = this.systemRenderer.updateHover(
+        systems, this.mouseX, this.mouseY, camera, canvasW, canvasH,
+      )
+    } else {
+      this.hoveredPlanet = null
+    }
+
+    // ── Stars ───────────────────────────────────────────────────────────────
     const stars = this.galaxyManager.getStarsInViewport(bounds)
     this.starRenderer.render(stars, camera, canvasW, canvasH)
 
@@ -44,20 +72,26 @@ export class Renderer {
 
     // ── Waypoints ───────────────────────────────────────────────────────────
     this.renderWaypoints(ship, canvasW, canvasH)
+
+    // ── Planet tooltip (on top of everything) ────────────────────────────────
+    if (this.hoveredPlanet) {
+      this.systemRenderer.renderTooltip(
+        this.hoveredPlanet, this.mouseX, this.mouseY, canvasW, canvasH,
+      )
+    }
   }
 
   private renderShip(ship: Ship, canvasW: number, canvasH: number): void {
     const ctx = this.ctx
     const { sx, sy } = this.camera.worldToScreen(ship.worldX, ship.worldY, canvasW, canvasH)
 
-    const SIZE = 7
+    const SIZE  = 7
     const angle = ship.heading
 
     ctx.save()
     ctx.translate(sx, sy)
     ctx.rotate(angle)
 
-    // Ship body (simple triangle)
     ctx.beginPath()
     ctx.moveTo(0, -SIZE)
     ctx.lineTo(SIZE * 0.55, SIZE * 0.7)
@@ -70,7 +104,6 @@ export class Renderer {
     ctx.lineWidth = 0.8
     ctx.stroke()
 
-    // Engine glow
     if (ship.isMoving) {
       ctx.beginPath()
       ctx.arc(0, SIZE * 0.5, SIZE * 0.3, 0, Math.PI * 2)
@@ -80,7 +113,6 @@ export class Renderer {
 
     ctx.restore()
 
-    // Exploration radius ring (subtle)
     const exploreRadiusPx = ship.exploreRadiusLy * this.camera.zoom
     if (exploreRadiusPx > 10 && exploreRadiusPx < canvasW) {
       ctx.beginPath()
@@ -92,7 +124,7 @@ export class Renderer {
   }
 
   private renderWaypoints(ship: Ship, canvasW: number, canvasH: number): void {
-    const ctx = this.ctx
+    const ctx       = this.ctx
     const waypoints = ship.getWaypoints()
     if (waypoints.length === 0) return
 
@@ -112,12 +144,11 @@ export class Renderer {
     }
 
     ctx.strokeStyle = 'rgba(80,140,200,0.35)'
-    ctx.lineWidth = 1
+    ctx.lineWidth   = 1
     ctx.setLineDash([4, 6])
     ctx.stroke()
     ctx.setLineDash([])
 
-    // Draw waypoint dots
     for (let i = 1; i < waypoints.length; i++) {
       const wp = waypoints[i]
       if (!wp) continue
@@ -128,14 +159,13 @@ export class Renderer {
       ctx.fill()
     }
 
-    // Destination marker (last waypoint)
     const dest = waypoints[waypoints.length - 1]
     if (dest) {
       const { sx, sy } = this.camera.worldToScreen(dest.x, dest.y, canvasW, canvasH)
       ctx.beginPath()
       ctx.arc(sx, sy, 4, 0, Math.PI * 2)
       ctx.strokeStyle = 'rgba(100,180,255,0.5)'
-      ctx.lineWidth = 1.2
+      ctx.lineWidth   = 1.2
       ctx.stroke()
     }
   }

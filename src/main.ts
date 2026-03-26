@@ -48,6 +48,16 @@ input.onCameraReset = () => {
   camera.worldY = ship.worldY
 }
 
+// Forward mouse position to renderer for planet hover detection
+canvas.addEventListener('mousemove', (e) => {
+  renderer.mouseX = e.clientX
+  renderer.mouseY = e.clientY
+})
+canvas.addEventListener('mouseleave', () => {
+  renderer.mouseX = -9999
+  renderer.mouseY = -9999
+})
+
 // ── HUD elements ──────────────────────────────────────────────────────────────
 
 const hudPos    = document.getElementById('hud-pos')

@@ -1,7 +1,7 @@
 import type { WorldBounds } from '../galaxy/ChunkCoord'
 
 const MIN_ZOOM = 0.0005   // ~100,000 Ly across screen
-const MAX_ZOOM = 150      // close-up individual star systems
+const MAX_ZOOM = 2000     // close-up planetary systems (1 AU ≈ 1200 px at max)
 
 /**
  * Camera for a 2D world.
