@@ -29,32 +29,51 @@ def _spiral_chunks():
 
 def _ensure_complex_life(planet: dict) -> bool:
     """
-    Guarantee the homeworld has LIFE_COMPLEX biosphere and recompute
-    colonyYields to reflect it.  Returns True if any change was made.
+    Guarantee the homeworld has LIFE_COMPLEX biosphere AND minimum resource
+    yields sufficient for self-sufficiency at every development level.
+    Returns True if any change was made.
 
-    A planet that produced a spacefaring civilisation must have complex life,
-    regardless of what the procedural RNG happened to generate.
+    A planet that produced a spacefaring civilisation must have complex life
+    and the resource base to sustain advanced development without trade.
     """
-    bio = planet['biosphere']
-    if bio['stage'] == LIFE_COMPLEX:
-        return False
+    bio     = planet['biosphere']
+    changed = False
 
-    bio['stage']    = LIFE_COMPLEX
-    bio['coverage'] = max(bio.get('coverage', 0.0), 0.7)
-    if bio.get('oxygenContribution', 0) < 0.10:
-        bio['oxygenContribution'] = round(bio['coverage'] * 0.18, 3)
+    if bio['stage'] != LIFE_COMPLEX:
+        bio['stage']    = LIFE_COMPLEX
+        bio['coverage'] = max(bio.get('coverage', 0.0), 0.7)
+        if bio.get('oxygenContribution', 0) < 0.10:
+            bio['oxygenContribution'] = round(bio['coverage'] * 0.18, 3)
+        planet['habitability']['biosphere'] = 0.8
+        # Recompute yields with corrected biosphere (picks up new formulas too)
+        planet['colonyYields'] = colony_resource_yields({
+            'planetType':  planet['planetType'],
+            'biosphere':   bio,
+            'hydrosphere': planet['hydrosphere'],
+            'resources':   planet['resources'],
+        })
+        changed = True
 
-    # Recompute food (and other bio-driven yields) with the corrected biosphere
-    planet['colonyYields'] = colony_resource_yields({
-        'planetType':  planet['planetType'],
-        'biosphere':   bio,
-        'hydrosphere': planet['hydrosphere'],
-        'resources':   planet['resources'],
-    })
+    # Enforce minimum yields for complete self-sufficiency at every dev level.
+    # Values are base consumption rate × 1.5 so there is always a comfortable
+    # surplus — see colony_economics.BASE_CONSUMPTION / DEV_CONSUMPTION.
+    _MINS = {
+        'food':           0.75,   # BASE 0.5
+        'water':          0.75,   # BASE 0.5
+        'minerals':       0.30,   # DEV 2 needs 0.20
+        'metals':         0.15,   # DEV 3 needs 0.10
+        'organicFuels':   0.15,   # DEV 3 needs 0.10
+        'chemFeedstocks': 0.08,   # DEV 4 needs 0.05
+        'fusionFuel':     0.08,   # DEV 4 needs 0.05
+        'radioactives':   0.03,   # DEV 5 needs 0.02
+    }
+    cy = planet['colonyYields']
+    for r, mn in _MINS.items():
+        if cy.get(r, 0.0) < mn:
+            cy[r] = mn
+            changed = True
 
-    # Update the habitability biosphere sub-score to match LIFE_COMPLEX (0.8)
-    planet['habitability']['biosphere'] = 0.8
-    return True
+    return changed
 
 
 def find_homeworld(config, density_field, max_rings: int = 20) -> dict | None:

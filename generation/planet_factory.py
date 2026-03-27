@@ -498,19 +498,31 @@ def colony_resource_yields(planet: dict) -> dict:
     else:
         water = 0.0
 
-    # Organic fuels and chemical feedstocks: carbon worlds are primary source
-    org_ab = res['organics']['abundance']
+    # Organic fuels and chemical feedstocks
+    org_ab   = res['organics']['abundance']
+    coverage = bio.get('coverage', 0.0)
     if pt == CARBON_WORLD:
+        # Carbon worlds are the richest organic source
         organic_fuels   = org_ab * 0.8
         chem_feedstocks = org_ab * 0.6
+    elif pt in (TERRAN, OCEANIC) and coverage > 0:
+        # Living worlds: biosphere is the primary organic factory.
+        # Complex life produces rich biological polymers and chemical feedstocks.
+        organic_fuels   = coverage * 0.4 + org_ab * 0.1
+        chem_feedstocks = coverage * 0.2 if bio['stage'] == LIFE_COMPLEX else 0.0
     else:
         organic_fuels   = org_ab * 0.3
         chem_feedstocks = 0.0
 
-    # Minerals: rocky dry/volcanic worlds
+    # Minerals: rocky dry/volcanic worlds are primary; Terran/Oceanic have
+    # accessible surface deposits but in smaller quantities
     if pt in _MINERAL_TYPES:
         minerals = (res['metals']['abundance'] * 0.7
                     + res['rareEarths']['abundance'] * 0.5)
+    elif pt in (TERRAN, OCEANIC):
+        # Surface-accessible sedimentary and metamorphic deposits
+        minerals = (res['metals']['abundance'] * 0.25
+                    + res['rareEarths']['abundance'] * 0.15)
     else:
         minerals = 0.0
 
