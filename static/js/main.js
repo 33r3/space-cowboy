@@ -693,8 +693,9 @@ rpShipSelect?.addEventListener('change', _updateSetupCostDisplay)
 
 rpAddLeg?.addEventListener('click', () => {
   const colonies = colonyManager.colonies.filter(c => colonyManager.isActiveColony(c.planetId))
+  const lastLeg  = _builderLegs[_builderLegs.length - 1]
   _builderLegs.push({
-    fromId: colonies[0]?.planetId ?? '',
+    fromId: lastLeg?.toId ?? colonies[0]?.planetId ?? '',
     toId:   colonies[1]?.planetId ?? colonies[0]?.planetId ?? '',
     cargo:  {},
   })

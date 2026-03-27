@@ -107,6 +107,7 @@ export class InputHandler {
     }
 
     this._onKeyDown = (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return
       this._keys.add(e.key)
 
       if (e.key === '+' || e.key === '=') {
@@ -135,6 +136,7 @@ export class InputHandler {
     }
 
     this._onKeyUp = (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return
       this._keys.delete(e.key)
     }
 
@@ -159,7 +161,7 @@ export class InputHandler {
     const dt = 1 / 60
 
     if (this._keys.has('ArrowLeft')  || this._keys.has('a')) this.camera.worldX -= panSpeed * dt
-    if (this._keys.has('ArrowRight') || this._keys.has('d')) this.camera.worldX += panSpeed * dt
+    if (this._keys.has('ArrowRight')) this.camera.worldX += panSpeed * dt
     if (this._keys.has('ArrowUp')    || this._keys.has('w')) this.camera.worldY -= panSpeed * dt
     if (this._keys.has('ArrowDown')  || this._keys.has('s')) this.camera.worldY += panSpeed * dt
   }
