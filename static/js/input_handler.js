@@ -118,7 +118,7 @@ export class InputHandler {
         this.camera.zoomAt(1 / ZOOM_FACTOR_KEY, this.viewport.width / 2, this.viewport.height / 2,
           this.viewport.width, this.viewport.height)
       }
-      if (e.key.toLowerCase() === 'd' && !e.shiftKey) {
+      if (e.key === '`') {
         this.onDebugToggle?.()
       }
       if (e.key.toLowerCase() === 'r') {
@@ -161,7 +161,7 @@ export class InputHandler {
     const dt = 1 / 60
 
     if (this._keys.has('ArrowLeft')  || this._keys.has('a')) this.camera.worldX -= panSpeed * dt
-    if (this._keys.has('ArrowRight')) this.camera.worldX += panSpeed * dt
+    if (this._keys.has('ArrowRight') || this._keys.has('d')) this.camera.worldX += panSpeed * dt
     if (this._keys.has('ArrowUp')    || this._keys.has('w')) this.camera.worldY -= panSpeed * dt
     if (this._keys.has('ArrowDown')  || this._keys.has('s')) this.camera.worldY += panSpeed * dt
   }
