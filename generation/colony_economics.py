@@ -101,6 +101,7 @@ def migrate_colony(colony: dict) -> dict:
     colony.setdefault('transitTicks',   None)    # int; only set for in_transit
     colony.setdefault('sourcePlanetId', None)    # str; only set for in_transit
     colony.setdefault('lastTickedAt', _now_iso())
+    colony.setdefault('colonyYields', {})        # persisted planet yields (set at founding)
     colony.setdefault('stockpiles', {r: 0.0 for r in ALL_RESOURCES})
     # Ensure all resource keys exist in stockpiles
     for r in ALL_RESOURCES:

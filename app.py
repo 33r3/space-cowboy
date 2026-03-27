@@ -134,7 +134,7 @@ def _enrich_colony(col: dict, planet: dict) -> dict:
             'isAbandoned':        False,
         }
 
-    yields = planet['colonyYields']
+    yields = col.get('colonyYields') or planet['colonyYields']
     ext    = extraction_per_tick(col, yields)
     con    = consumption_per_tick(col)
     net    = net_flow_per_tick(col, yields)
@@ -227,6 +227,7 @@ def api_homeworld():
             'developmentLevel': 2,
             'isHomeworld':      True,
             'lastTickedAt':     _now_iso(),
+            'colonyYields':     result['planet']['colonyYields'],
             'stockpiles':       dict(STARTER_STOCKPILES),
         })
         data['homeworld'] = {'planetId': planet_id}
@@ -249,6 +250,16 @@ def api_colonies_get():
         if planet is None:
             continue
 
+        # Lazily populate colonyYields for existing saves.
+        # Homeworld uses the patched cache; others use the generated planet.
+        if not col.get('colonyYields'):
+            if col.get('isHomeworld'):
+                hw = find_homeworld(config, density_field)
+                col['colonyYields'] = hw['planet']['colonyYields'] if hw else planet['colonyYields']
+            else:
+                col['colonyYields'] = planet['colonyYields']
+            changed = True
+
         # Colony ship in transit — check arrival, skip economics
         if col.get('status') == 'in_transit':
             departed  = datetime.fromisoformat(col['departedAt'].replace('Z', '+00:00'))
@@ -267,10 +278,10 @@ def api_colonies_get():
                 changed = True   # migrate_colony may have added fields
                 continue
 
-        # Apply pending ticks (lazy real-time advance)
+        # Apply pending ticks using the colony's stored yields
         n = pending_ticks(col['lastTickedAt'])
         if n > 0:
-            col = apply_ticks(col, planet['colonyYields'], n)
+            col = apply_ticks(col, col['colonyYields'], n)
             col['lastTickedAt'] = _now_iso()
             changed = True
 
@@ -434,6 +445,7 @@ def api_colonies_post():
         'starvationTicks': 0,
         'isHomeworld':     False,
         'stockpiles':      dict(STARTER_STOCKPILES),
+        'colonyYields':    planet['colonyYields'],
     }
     data['colonies'].append(colony)
     _save_colonies(data)
@@ -459,7 +471,8 @@ def api_colony_upgrade(planet_id: str):
     # Apply pending ticks first
     n = pending_ticks(colony['lastTickedAt'])
     if n > 0:
-        colony = apply_ticks(colony, planet['colonyYields'], n)
+        yields = colony.get('colonyYields') or planet['colonyYields']
+        colony = apply_ticks(colony, yields, n)
         colony['lastTickedAt'] = _now_iso()
 
     ok, reason = can_upgrade_dev(colony)
