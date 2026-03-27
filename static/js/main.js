@@ -452,7 +452,7 @@ function _renderColonyList() {
       if (!col?.planet) return
       camera.worldX = col.planet.worldX
       camera.worldY = col.planet.worldY
-      if (camera.zoom < 2) camera.zoom = 2
+      camera.zoom   = 3
     })
   })
 }
