@@ -726,6 +726,7 @@ rpSubmit?.addEventListener('click', async () => {
 
   try {
     await routeManager.createRoute({ name, shipClass, legs })
+    rpSubmit.disabled = false
     _closeBuilder()
     _renderRouteList()
   } catch (err) {
