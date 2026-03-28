@@ -406,8 +406,12 @@ def api_colonies_post():
 
     data = _load_colonies()
 
-    if any(c['planetId'] == planet_id for c in data['colonies']):
-        return jsonify({'error': 'colony already exists', 'planetId': planet_id}), 409
+    existing = next((c for c in data['colonies'] if c['planetId'] == planet_id), None)
+    if existing:
+        if existing.get('status') != 'abandoned':
+            return jsonify({'error': 'colony already exists', 'planetId': planet_id}), 409
+        # Remove the abandoned record so it can be repopulated below
+        data['colonies'] = [c for c in data['colonies'] if c['planetId'] != planet_id]
 
     # ── Colonization constraints ───────────────────────────────────────────────
     target_x = star['worldX']

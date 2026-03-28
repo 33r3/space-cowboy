@@ -158,16 +158,20 @@ function _renderColonySection(colony) {
   // Development level
   const dev = colony.developmentLevel ?? 1
   cpDevName.textContent = `${DEV_NAMES[dev - 1] ?? 'Primitive'} (${dev})`
-  cpUpgradeBtn.disabled = !colony.canUpgradeDev || dev >= 5
-  cpUpgradeBtn.textContent = dev >= 5 ? 'Max' : `→ ${DEV_NAMES[dev] ?? ''}`
+  if (!colony.isAbandoned) {
+    cpUpgradeBtn.disabled = !colony.canUpgradeDev || dev >= 5
+    cpUpgradeBtn.textContent = dev >= 5 ? 'Max' : `→ ${DEV_NAMES[dev] ?? ''}`
+  }
 
-  if (colony.upgradeCost && dev < 5) {
-    cpUpgradeCost.textContent = 'Cost: ' +
-      Object.entries(colony.upgradeCost)
-        .map(([k, v]) => `${v} ${RES_LABELS[k] ?? k}`)
-        .join(' · ')
-  } else {
-    cpUpgradeCost.textContent = ''
+  if (!colony.isAbandoned) {
+    if (colony.upgradeCost && dev < 5) {
+      cpUpgradeCost.textContent = 'Cost: ' +
+        Object.entries(colony.upgradeCost)
+          .map(([k, v]) => `${v} ${RES_LABELS[k] ?? k}`)
+          .join(' · ')
+    } else {
+      cpUpgradeCost.textContent = ''
+    }
   }
 
   // Resource flows
@@ -204,6 +208,22 @@ function _renderColonySection(colony) {
     ).join('')
   } else {
     cpStockpiles.innerHTML = '<span style="color:#445566">Empty</span>'
+  }
+
+  // Abandoned: show repopulate button using normal colonization preview
+  if (colony.isAbandoned && _panelMeta && _panelPlanet) {
+    cpFoundBtn.style.display = 'block'
+    cpFoundBtn.disabled      = true
+    cpFoundBtn.textContent   = 'Checking...'
+    colonyManager.getColonizationPreview(_panelMeta.cx, _panelMeta.cy, _panelMeta.starIndex, _panelPlanet.index)
+      .then(preview => {
+        cpFoundBtn.disabled    = !preview.eligible || !preview.canAfford
+        cpFoundBtn.textContent = 'Resend Colony Ship'
+      })
+      .catch(() => {
+        cpFoundBtn.disabled    = true
+        cpFoundBtn.textContent = 'Resend Colony Ship'
+      })
   }
 }
 
