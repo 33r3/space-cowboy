@@ -485,6 +485,7 @@ const rpSetupCost    = document.getElementById('rp-setup-cost')
 const rpBuilderError = document.getElementById('rp-builder-error')
 const rpSubmit       = document.getElementById('rp-submit')
 const rpCancel       = document.getElementById('rp-cancel')
+const rpBuilderTitle = document.getElementById('rp-builder-title')
 
 const ALL_RESOURCES = [
   'food', 'water', 'organicFuels', 'chemFeedstocks',
@@ -523,6 +524,7 @@ function _renderRouteList() {
       <div class="rp-route-header">
         <span class="rp-route-name">${r.name}${statusBadge}${unreadBadge}</span>
         <span class="rp-route-ship">${r.shipName ?? r.shipClass}</span>
+        <button class="rp-edit-btn" data-id="${r.routeId}">✎</button>
         <button class="rp-cancel-btn" data-id="${r.routeId}">✕</button>
       </div>
       ${leg && !paused ? `<div class="rp-leg-progress">
@@ -544,6 +546,14 @@ function _renderRouteList() {
       } catch (err) {
         console.error('Delete route failed:', err.message)
       }
+    })
+  })
+
+  rpRouteList.querySelectorAll('.rp-edit-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      const route = routeManager.routes.find(r => r.routeId === btn.dataset.id)
+      if (route) await _openEditor(route)
     })
   })
 
@@ -569,6 +579,8 @@ routeManager.onUpdate = () => {
 
 let _builderShips   = []
 let _builderLegs    = []   // [{ fromId, toId, cargo }]
+let _builderMode    = 'create'   // 'create' | 'edit'
+let _builderRouteId = null
 
 function _getColonyOptions() {
   return colonyManager.colonies
@@ -591,6 +603,25 @@ function _updateSetupCostDisplay() {
     `${ship.maxRangeLy} Ly max range · ${ship.speedLyPerTick} Ly/tick</span></div>`
 }
 
+function _updateRangeHint(legIdx) {
+  const hint = rpLegsDiv.querySelector(`.rp-range-hint[data-idx="${legIdx}"]`)
+  if (!hint) return
+  const leg      = _builderLegs[legIdx]
+  const ship     = _builderShips.find(s => s.id === rpShipSelect?.value)
+  const maxRange = ship?.maxRangeLy ?? Infinity
+  const fromCol  = leg?.fromId ? colonyManager.getColony(leg.fromId) : null
+  const toCol    = leg?.toId   ? colonyManager.getColony(leg.toId)   : null
+  if (!fromCol?.planet || !toCol?.planet || leg.fromId === leg.toId) {
+    hint.textContent = ''; hint.className = 'rp-range-hint'; return
+  }
+  const dx   = fromCol.planet.worldX - toCol.planet.worldX
+  const dy   = fromCol.planet.worldY - toCol.planet.worldY
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const ok   = dist <= maxRange
+  hint.textContent = `${Math.round(dist)} / ${maxRange} Ly`
+  hint.className   = `rp-range-hint ${ok ? 'rp-range-ok' : 'rp-range-over'}`
+}
+
 function _renderBuilderLegs() {
   const colonyOptions = _getColonyOptions()
   rpLegsDiv.innerHTML = _builderLegs.map((leg, i) => {
@@ -611,6 +642,7 @@ function _renderBuilderLegs() {
         <select class="rp-from-select" data-idx="${i}">${colonyOptions}</select>
         <span>→</span>
         <select class="rp-to-select" data-idx="${i}">${colonyOptions}</select>
+        <span class="rp-range-hint" data-idx="${i}"></span>
       </div>
       <div class="rp-cargo-grid">${cargoRows}</div>
     </div>`
@@ -626,14 +658,21 @@ function _renderBuilderLegs() {
     if (_builderLegs[idx]?.toId) sel.value = _builderLegs[idx].toId
   })
 
+  // Initial range hints
+  _builderLegs.forEach((_, i) => _updateRangeHint(i))
+
   rpLegsDiv.querySelectorAll('.rp-from-select').forEach(sel => {
     sel.addEventListener('change', () => {
-      _builderLegs[parseInt(sel.dataset.idx)].fromId = sel.value
+      const idx = parseInt(sel.dataset.idx)
+      _builderLegs[idx].fromId = sel.value
+      _updateRangeHint(idx)
     })
   })
   rpLegsDiv.querySelectorAll('.rp-to-select').forEach(sel => {
     sel.addEventListener('change', () => {
-      _builderLegs[parseInt(sel.dataset.idx)].toId = sel.value
+      const idx = parseInt(sel.dataset.idx)
+      _builderLegs[idx].toId = sel.value
+      _updateRangeHint(idx)
     })
   })
   rpLegsDiv.querySelectorAll('.rp-cargo-input').forEach(inp => {
@@ -652,9 +691,14 @@ function _renderBuilderLegs() {
 }
 
 async function _openBuilder() {
-  rpBuilder.style.display = 'block'
-  rpNewBtn.style.display  = 'none'
+  _builderMode    = 'create'
+  _builderRouteId = null
+  rpBuilder.style.display    = 'block'
+  rpNewBtn.style.display     = 'none'
   rpBuilderError.textContent = ''
+  rpBuilderTitle.textContent = 'NEW ROUTE'
+  rpSubmit.textContent       = 'Create Route'
+  rpShipSelect.disabled      = false
 
   const colonies = colonyManager.colonies.filter(c => colonyManager.isActiveColony(c.planetId))
   if (!colonies.length) {
@@ -684,12 +728,52 @@ async function _openBuilder() {
 }
 
 function _closeBuilder() {
-  rpBuilder.style.display = 'none'
-  rpNewBtn.style.display  = 'block'
+  rpBuilder.style.display    = 'none'
+  rpNewBtn.style.display     = 'block'
   rpBuilderError.textContent = ''
+  rpShipSelect.disabled      = false
+  _builderMode    = 'create'
+  _builderRouteId = null
 }
 
-rpShipSelect?.addEventListener('change', _updateSetupCostDisplay)
+async function _openEditor(route) {
+  _builderMode    = 'edit'
+  _builderRouteId = route.routeId
+  rpBuilder.style.display    = 'block'
+  rpNewBtn.style.display     = 'none'
+  rpBuilderError.textContent = ''
+  rpBuilderTitle.textContent = 'EDIT ROUTE'
+  rpSubmit.textContent       = 'Save Changes'
+  rpSubmit.disabled          = false
+
+  const colonies = colonyManager.colonies.filter(c => colonyManager.isActiveColony(c.planetId))
+  if (!colonies.length) { rpBuilderError.textContent = 'No active colonies.'; return }
+
+  try { _builderShips = await routeManager.getShipsForColony(colonies[0].planetId) }
+  catch { _builderShips = [] }
+
+  rpShipSelect.innerHTML = _builderShips.map(s =>
+    `<option value="${s.id}">${s.name} (dev ${s.devRequired}+, cap ${s.capacity})</option>`
+  ).join('')
+  rpShipSelect.value    = route.shipClass
+  rpShipSelect.disabled = true
+
+  rpNameInput.value = route.name ?? ''
+
+  _builderLegs = (route.legs ?? []).map(leg => ({
+    fromId: leg.fromPlanetId,
+    toId:   leg.toPlanetId,
+    cargo:  { ...(leg.cargo ?? {}) },
+  }))
+
+  _updateSetupCostDisplay()
+  _renderBuilderLegs()
+}
+
+rpShipSelect?.addEventListener('change', () => {
+  _updateSetupCostDisplay()
+  _builderLegs.forEach((_, i) => _updateRangeHint(i))
+})
 
 rpAddLeg?.addEventListener('click', () => {
   const colonies = colonyManager.colonies.filter(c => colonyManager.isActiveColony(c.planetId))
@@ -725,7 +809,11 @@ rpSubmit?.addEventListener('click', async () => {
   })
 
   try {
-    await routeManager.createRoute({ name, shipClass, legs })
+    if (_builderMode === 'edit') {
+      await routeManager.updateRoute(_builderRouteId, { name, legs })
+    } else {
+      await routeManager.createRoute({ name, shipClass, legs })
+    }
     rpSubmit.disabled = false
     _closeBuilder()
     _renderRouteList()

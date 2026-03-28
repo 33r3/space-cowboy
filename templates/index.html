@@ -304,6 +304,19 @@
         font-size: 10px; cursor: pointer; padding: 0;
       }
       .rp-remove-leg:hover { color: #cc4444; }
+      #rp-builder-title {
+        color: #aaccee; font-size: 11px; font-weight: bold;
+        letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px;
+      }
+      .rp-edit-btn {
+        background: none; border: none; color: #445566;
+        font-size: 12px; cursor: pointer; padding: 0 2px;
+      }
+      .rp-edit-btn:hover { color: #66aadd; }
+      .rp-range-hint { font-size: 9px; margin-left: 6px; white-space: nowrap; color: #445566; }
+      .rp-range-ok   { color: #44cc88; }
+      .rp-range-over { color: #cc4444; }
+      #rp-ship-select:disabled { opacity: 0.6; cursor: not-allowed; }
       .rp-leg-from-to {
         display: flex; align-items: center; gap: 4px; margin-bottom: 6px;
       }
@@ -541,6 +554,7 @@
       <button id="rp-new-btn">+ New Route</button>
 
       <div id="rp-builder" style="display:none">
+        <div id="rp-builder-title"></div>
         <div class="rp-builder-label">Ship Class</div>
         <select id="rp-ship-select"></select>
         <div id="rp-setup-cost"></div>

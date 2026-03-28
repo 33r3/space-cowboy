@@ -687,6 +687,34 @@ def api_routes_delete(route_id: str):
     return jsonify({'ok': True})
 
 
+@app.route('/api/routes/<route_id>', methods=['PATCH'])
+def api_routes_patch(route_id: str):
+    routes_data = _load_routes()
+    route = next((r for r in routes_data['routes'] if r['routeId'] == route_id), None)
+    if route is None:
+        return jsonify({'error': 'route not found'}), 404
+
+    body = request.get_json(force=True) or {}
+
+    if 'name' in body:
+        route['name'] = str(body['name']).strip() or route['name']
+
+    if 'legs' in body:
+        legs = body['legs']
+        colonies_data  = _load_colonies()
+        colonies_by_id = {c['planetId']: c for c in colonies_data['colonies']}
+        ok, reason = validate_route(legs, route['shipClass'], colonies_by_id, config, density_field)
+        if not ok:
+            return jsonify({'error': reason}), 400
+        route['legs'] = legs
+        route['currentLegIndex'] = route.get('currentLegIndex', 0) % len(legs)
+
+    _save_routes(routes_data)
+    colonies_data  = _load_colonies()
+    colonies_by_id = {c['planetId']: c for c in colonies_data['colonies']}
+    return jsonify({'route': _enrich_route(route, colonies_by_id)})
+
+
 @app.route('/api/routes/<route_id>/events/read', methods=['POST'])
 def api_route_events_read(route_id: str):
     routes_data = _load_routes()

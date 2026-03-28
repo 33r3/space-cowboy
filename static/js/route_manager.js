@@ -59,6 +59,23 @@ export class RouteManager {
     await this.#fetch()
   }
 
+  /**
+   * Update an existing trade route (name and/or legs).
+   * payload: { name?, legs?: [{fromPlanetId, toPlanetId, cargo}] }
+   */
+  async updateRoute(routeId, payload) {
+    const encoded = encodeURIComponent(routeId)
+    const resp = await fetch(`/api/routes/${encoded}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    })
+    const data = await resp.json()
+    if (!resp.ok) throw new Error(data.error ?? 'Failed to update route')
+    await this.#fetch()
+    return data.route
+  }
+
   /** Mark all events on a route as read. */
   async markEventsRead(routeId) {
     const encoded = encodeURIComponent(routeId)
