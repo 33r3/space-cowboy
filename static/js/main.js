@@ -79,6 +79,8 @@ const cpColonySection    = document.getElementById('colony-panel-colony-section'
 const cpYieldsSection    = document.getElementById('colony-panel-yields-section')
 const cpYields           = document.getElementById('colony-panel-yields')
 const cpFoundBtn         = document.getElementById('colony-panel-found')
+const cpSourceRow        = document.getElementById('colony-panel-source-row')
+const cpSourceSelect     = document.getElementById('colony-panel-source-select')
 const cpCloseBtn         = document.getElementById('colony-panel-close-btn')
 const cpSizeName         = document.getElementById('cp-size-name')
 const cpGrowthFill       = document.getElementById('cp-growth-fill')
@@ -217,7 +219,8 @@ function _renderColonySection(colony) {
     cpFoundBtn.textContent   = 'Checking...'
     colonyManager.getColonizationPreview(_panelMeta.cx, _panelMeta.cy, _panelMeta.starIndex, _panelPlanet.index)
       .then(preview => {
-        cpFoundBtn.disabled    = !preview.eligible || !preview.canAfford
+        const firstSource      = preview.sources?.[0]
+        cpFoundBtn.disabled    = !preview.eligible || !firstSource?.canAfford
         cpFoundBtn.textContent = 'Resend Colony Ship'
       })
       .catch(() => {
@@ -249,51 +252,53 @@ function _renderYieldsSection(planet, meta) {
   }
 
   // Colonization eligibility — fetch preview async, show loading state
-  cpFoundBtn.style.display = 'block'
-  cpFoundBtn.disabled      = true
-  cpFoundBtn.textContent   = 'Checking...'
-  cpStatus.innerHTML       = ''
+  cpFoundBtn.style.display  = 'block'
+  cpFoundBtn.disabled       = true
+  cpFoundBtn.textContent    = 'Checking...'
+  cpStatus.innerHTML        = ''
+  cpSourceRow.style.display = 'none'
+  cpSourceSelect.innerHTML  = ''
 
-  if (meta) {
-    colonyManager.getColonizationPreview(meta.cx, meta.cy, meta.starIndex, planet.index)
-      .then(preview => {
-        if (preview.eligible) {
-          const cost     = preview.cost ?? {}
-          const costStr  = Object.entries(cost)
-            .map(([k, v]) => `${v} ${RES_LABELS[k] ?? k}`)
-            .join(' · ')
-          const src      = preview.sourceColony
-          const affordColor = preview.canAfford ? '#66cc88' : '#cc4444'
-          const affordText  = preview.canAfford ? 'affordable' : 'INSUFFICIENT FUNDS'
-          const transitLine = preview.transitTicks
-            ? `Transit: <span style="color:#88aacc">~${preview.transitTicks} min</span><br>`
-            : ''
-          cpStatus.innerHTML =
-            `<div style="font-size:10px;line-height:1.9;color:#556677">` +
-            `Source: <span style="color:#88aacc">${src.name}</span>` +
-            ` <span style="color:#334455">(${src.devName})</span>` +
-            `  <span style="color:#334455">${preview.distance} Ly / ${preview.maxRange} Ly max</span><br>` +
-            `Cost: <span style="color:#88aacc">${costStr}</span><br>` +
-            transitLine +
-            `<span style="color:${affordColor}">${affordText}</span>` +
-            `</div>`
-          cpFoundBtn.disabled    = !preview.canAfford
-          cpFoundBtn.textContent = 'Found Colony'
-        } else {
-          cpStatus.innerHTML =
-            `<div style="font-size:10px;color:#cc4444">${preview.reason ?? 'Cannot colonize'}</div>`
-          cpFoundBtn.disabled    = true
-          cpFoundBtn.textContent = 'Found Colony'
-        }
-      })
-      .catch(() => {
-        cpFoundBtn.disabled    = true
+  if (!meta) { cpFoundBtn.disabled = true; cpFoundBtn.textContent = 'Found Colony'; return }
+
+  colonyManager.getColonizationPreview(meta.cx, meta.cy, meta.starIndex, planet.index)
+    .then(preview => {
+      if (!preview.eligible) {
+        cpStatus.innerHTML =
+          `<div style="font-size:10px;color:#cc4444">${preview.reason ?? 'Cannot colonize'}</div>`
+        cpFoundBtn.disabled = true; cpFoundBtn.textContent = 'Found Colony'; return
+      }
+
+      const costStr = Object.entries(preview.cost ?? {})
+        .map(([k, v]) => `${v} ${RES_LABELS[k] ?? k}`).join(' · ')
+
+      // Populate source dropdown
+      cpSourceSelect.innerHTML = ''
+      for (const src of preview.sources) {
+        const opt = document.createElement('option')
+        opt.value       = src.planetId
+        opt.textContent = `${src.name} (${src.devName})  ${src.distance} Ly`
+        if (!src.canAfford) opt.style.color = '#cc4444'
+        cpSourceSelect.appendChild(opt)
+      }
+      cpSourceRow.style.display = 'block'
+
+      function _applySelection() {
+        const src = preview.sources.find(s => s.planetId === cpSourceSelect.value)
+        if (!src) return
+        cpStatus.innerHTML =
+          `<div style="font-size:10px;line-height:1.9;color:#556677">` +
+          `Cost: <span style="color:#88aacc">${costStr}</span><br>` +
+          (src.transitTicks ? `Transit: <span style="color:#88aacc">~${src.transitTicks} min</span><br>` : '') +
+          `<span style="color:${src.canAfford ? '#66cc88' : '#cc4444'}">${src.canAfford ? 'affordable' : 'INSUFFICIENT FUNDS'}</span></div>`
+        cpFoundBtn.disabled    = !src.canAfford
         cpFoundBtn.textContent = 'Found Colony'
-      })
-  } else {
-    cpFoundBtn.disabled    = true
-    cpFoundBtn.textContent = 'Found Colony'
-  }
+      }
+
+      _applySelection()
+      cpSourceSelect.addEventListener('change', _applySelection)
+    })
+    .catch(() => { cpFoundBtn.disabled = true; cpFoundBtn.textContent = 'Found Colony' })
 }
 
 function openColonyPanel(planet, system) {
@@ -383,8 +388,9 @@ cpFoundBtn.addEventListener('click', async () => {
   cpFoundBtn.disabled    = true
   cpFoundBtn.textContent = 'Founding...'
   try {
+    const sourcePlanetId = cpSourceSelect.value || undefined
     const col = await colonyManager.foundColony(
-      _panelPlanet, _panelMeta.cx, _panelMeta.cy, _panelMeta.starIndex,
+      _panelPlanet, _panelMeta.cx, _panelMeta.cy, _panelMeta.starIndex, sourcePlanetId,
     )
     if (col?.status === 'in_transit') {
       cpTitle.style.color = '#ffaa44'

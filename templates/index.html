@@ -386,6 +386,12 @@
         border-color: rgba(40, 70, 60, 0.3);
         cursor: default;
       }
+      #colony-panel-source-select {
+        width: 100%; background: rgba(10,20,40,0.8);
+        border: 1px solid rgba(80,120,180,0.3); color: #88aacc;
+        font-family: 'Courier New', monospace; font-size: 10px;
+        padding: 3px 4px; border-radius: 3px;
+      }
       /* ── Colony List Panel ──────────────────────────────────────────── */
       #colony-list-panel {
         display: none;
@@ -540,6 +546,10 @@
         <div id="colony-panel-yields"></div>
       </div>
 
+      <div id="colony-panel-source-row" style="display:none; margin-top:8px">
+        <div class="cp-section-label" style="margin-bottom:4px">Source Colony</div>
+        <select id="colony-panel-source-select"></select>
+      </div>
       <button id="colony-panel-found" style="display:none">Found Colony</button>
     </div>
 

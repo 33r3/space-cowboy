@@ -62,11 +62,13 @@ export class ColonyManager {
    * planet must have an `index` field (its position index in the system).
    * Returns the created colony record, or throws on error.
    */
-  async foundColony(planet, cx, cy, starIndex) {
+  async foundColony(planet, cx, cy, starIndex, sourcePlanetId = undefined) {
+    const body = { cx, cy, starIndex, planetIndex: planet.index }
+    if (sourcePlanetId !== undefined) body.sourcePlanetId = sourcePlanetId
     const resp = await fetch('/api/colonies', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ cx, cy, starIndex, planetIndex: planet.index }),
+      body:    JSON.stringify(body),
     })
     const data = await resp.json()
     if (!resp.ok) throw new Error(data.error ?? 'Failed to found colony')
