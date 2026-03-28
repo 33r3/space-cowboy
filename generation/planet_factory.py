@@ -491,8 +491,11 @@ def colony_resource_yields(planet: dict) -> dict:
 
     # Water: liquid/mixed worlds full value; ice worlds need processing
     state = hydro['state']
-    if state in (WATER_LIQUID, WATER_MIXED):
+    if state == WATER_LIQUID:
         water = hydro['waterCoverage'] * hydro['liquidFraction']
+    elif state == WATER_MIXED:
+        water = (hydro['waterCoverage'] * hydro['liquidFraction']
+                 + hydro['iceCoverage'] * 0.3)
     elif state == WATER_ICE:
         water = hydro['iceCoverage'] * 0.3
     else:
