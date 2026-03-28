@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import tempfile
 from datetime import date, datetime, timezone
 from uuid import uuid4
 
@@ -40,12 +41,24 @@ def _load_colonies() -> dict:
     return {'homeworld': None, 'colonies': []}
 
 
+def _atomic_save(path: str, data: dict) -> None:
+    """Write data to path atomically using a unique temp file."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _save_colonies(data: dict) -> None:
-    os.makedirs(_DATA_DIR, exist_ok=True)
-    tmp = _COLONIES_FILE + '.tmp'
-    with open(tmp, 'w') as f:
-        json.dump(data, f, indent=2)
-    os.replace(tmp, _COLONIES_FILE)
+    _atomic_save(_COLONIES_FILE, data)
 
 
 def _load_routes() -> dict:
@@ -56,11 +69,7 @@ def _load_routes() -> dict:
 
 
 def _save_routes(data: dict) -> None:
-    os.makedirs(_DATA_DIR, exist_ok=True)
-    tmp = _ROUTES_FILE + '.tmp'
-    with open(tmp, 'w') as f:
-        json.dump(data, f, indent=2)
-    os.replace(tmp, _ROUTES_FILE)
+    _atomic_save(_ROUTES_FILE, data)
 
 
 def _now_iso() -> str:
