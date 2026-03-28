@@ -42,8 +42,10 @@ def _load_colonies() -> dict:
 
 def _save_colonies(data: dict) -> None:
     os.makedirs(_DATA_DIR, exist_ok=True)
-    with open(_COLONIES_FILE, 'w') as f:
+    tmp = _COLONIES_FILE + '.tmp'
+    with open(tmp, 'w') as f:
         json.dump(data, f, indent=2)
+    os.replace(tmp, _COLONIES_FILE)
 
 
 def _load_routes() -> dict:
@@ -55,8 +57,10 @@ def _load_routes() -> dict:
 
 def _save_routes(data: dict) -> None:
     os.makedirs(_DATA_DIR, exist_ok=True)
-    with open(_ROUTES_FILE, 'w') as f:
+    tmp = _ROUTES_FILE + '.tmp'
+    with open(tmp, 'w') as f:
         json.dump(data, f, indent=2)
+    os.replace(tmp, _ROUTES_FILE)
 
 
 def _now_iso() -> str:
