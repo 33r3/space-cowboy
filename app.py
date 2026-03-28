@@ -202,6 +202,16 @@ def api_system():
         return jsonify({'error': 'star not found'}), 404
 
     system = generate_system(star)
+
+    # Patch homeworld planet with corrected biosphere/yields if this is the homeworld star
+    hw = find_homeworld(config, density_field)
+    if hw and hw['cx'] == cx and hw['cy'] == cy and hw['starIndex'] == index:
+        hw_id = hw['planet']['id']
+        system['planets'] = [
+            hw['planet'] if p['id'] == hw_id else p
+            for p in system['planets']
+        ]
+
     return jsonify(system)
 
 
