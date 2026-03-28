@@ -233,12 +233,21 @@ def api_homeworld():
             'cy':               result['cy'],
             'starIndex':        result['starIndex'],
             'founded':          str(date.today()),
-            'size':             2,
-            'developmentLevel': 2,
+            'size':             3,
+            'developmentLevel': 3,
             'isHomeworld':      True,
             'lastTickedAt':     _now_iso(),
             'colonyYields':     result['planet']['colonyYields'],
-            'stockpiles':       dict(STARTER_STOCKPILES),
+            'stockpiles': {
+                'food':           100.0,
+                'water':          100.0,
+                'minerals':       200.0,
+                'metals':         150.0,
+                'organicFuels':   100.0,
+                'chemFeedstocks':  50.0,
+                'fusionFuel':      50.0,
+                'radioactives':    10.0,
+            },
         })
         data['homeworld'] = {'planetId': planet_id}
         data['colonies'].append(colony)
