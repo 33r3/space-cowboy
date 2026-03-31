@@ -2,9 +2,8 @@ const ZOOM_FACTOR_SCROLL = 1.12
 const ZOOM_FACTOR_KEY    = 1.08
 
 export class InputHandler {
-  constructor(canvas, camera, ship, viewport) {
+  constructor(canvas, camera, viewport) {
     this.camera   = camera
-    this.ship     = ship
     this.viewport = viewport
 
     this._isDragging  = false
@@ -17,9 +16,11 @@ export class InputHandler {
     this._lastPinchDist = 0
     this._keys        = new Set()
 
-    this.onDebugToggle = null
-    this.onCameraReset = null
-    this.onCanvasClick = null   // fired with {clientX, clientY} on non-drag left click
+    this.onDebugToggle      = null
+    this.onCameraReset      = null
+    this.onCanvasClick      = null   // fired with {clientX, clientY} on non-drag left click
+    this.onRoutesToggle     = null
+    this.onColonyListToggle = null
 
     this._onMouseDown = (e) => {
       if (e.button !== 0) return
@@ -50,14 +51,6 @@ export class InputHandler {
 
       if (!this._hasDragged && e.button === 0) {
         this.onCanvasClick?.({ clientX: e.clientX, clientY: e.clientY })
-        const { wx, wy } = this.camera.screenToWorld(
-          e.clientX, e.clientY, this.viewport.width, this.viewport.height,
-        )
-        if (e.shiftKey) {
-          this.ship.addWaypoint(wx, wy)
-        } else {
-          this.ship.setDestination(wx, wy)
-        }
       }
     }
 
@@ -129,9 +122,6 @@ export class InputHandler {
       }
       if (e.key.toLowerCase() === 'l') {
         this.onColonyListToggle?.()
-      }
-      if (e.key === 'Escape') {
-        this.ship.clearWaypoints()
       }
     }
 

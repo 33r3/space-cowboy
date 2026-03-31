@@ -86,6 +86,14 @@ def colonization_range(source_dev_level: int) -> float:
     """Max colonization range in light-years for a given source dev level."""
     return COLONIZATION_RANGE_LY.get(source_dev_level, 0.0)
 
+
+SCOUT_RANGE_MULTIPLIER: float = 1.5
+
+
+def scout_range(source_dev_level: int) -> float:
+    """Max scout probe range in light-years for a given source dev level."""
+    return colonization_range(source_dev_level) * SCOUT_RANGE_MULTIPLIER
+
 # ── Migration ─────────────────────────────────────────────────────────────────
 
 def migrate_colony(colony: dict) -> dict:

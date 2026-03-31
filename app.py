@@ -17,10 +17,10 @@ from generation.colony_economics import (
     migrate_colony, apply_ticks, pending_ticks,
     extraction_per_tick, consumption_per_tick, net_flow_per_tick,
     can_upgrade_dev, apply_upgrade_dev, size_name, dev_name, upgrade_cost,
-    colonization_cost, colonization_range,
+    colonization_cost, colonization_range, scout_range,
 )
 from generation.trade_routes import (
-    SHIP_CLASSES, available_ship_classes,
+    SHIP_CLASSES, SCOUT_COST, available_ship_classes,
     leg_distance, leg_transit_ticks, validate_route, tick_routes,
 )
 
@@ -32,6 +32,7 @@ density_field = DensityField(config)
 _DATA_DIR      = os.path.join(os.path.dirname(__file__), 'data')
 _COLONIES_FILE = os.path.join(_DATA_DIR, 'colonies.json')
 _ROUTES_FILE   = os.path.join(_DATA_DIR, 'routes.json')
+_SCOUTS_FILE   = os.path.join(_DATA_DIR, 'scouts.json')
 
 
 def _load_colonies() -> dict:
@@ -72,6 +73,17 @@ def _save_routes(data: dict) -> None:
     _atomic_save(_ROUTES_FILE, data)
 
 
+def _load_scouts() -> list:
+    if os.path.exists(_SCOUTS_FILE):
+        with open(_SCOUTS_FILE) as f:
+            return json.load(f)
+    return []
+
+
+def _save_scouts(scouts: list) -> None:
+    _atomic_save(_SCOUTS_FILE, scouts)
+
+
 def _now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
@@ -89,6 +101,12 @@ def _get_planet(cx: int, cy: int, star_index: int, planet_id: str):
 def _star_position(colony: dict) -> tuple[float, float] | None:
     """Return (worldX, worldY) of a colony's star (uses chunk cache)."""
     star = regenerate_star(colony['cx'], colony['cy'], colony['starIndex'], config, density_field)
+    return (star['worldX'], star['worldY']) if star else None
+
+
+def _star_position_by_coords(cx: int, cy: int, index: int) -> tuple[float, float] | None:
+    """Return (worldX, worldY) of a star by chunk coords and star index."""
+    star = regenerate_star(cx, cy, index, config, density_field)
     return (star['worldX'], star['worldY']) if star else None
 
 
@@ -767,6 +785,152 @@ def api_route_events_read(route_id: str):
             _save_routes(routes_data)
             return jsonify({'ok': True})
     return jsonify({'error': 'route not found'}), 404
+
+
+# ── Scout probes ─────────────────────────────────────────────────────────────
+
+def _current_tick() -> int:
+    """Current game tick based on wall clock (same logic as pending_ticks)."""
+    epoch = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    now   = datetime.now(tz=timezone.utc)
+    return int((now - epoch).total_seconds() / TICK_SECONDS)
+
+
+@app.route('/api/scout-preview', methods=['GET'])
+def api_scout_preview():
+    star_id = request.args.get('starId', '')
+    try:
+        parts      = star_id.split(':')
+        chunk_parts = parts[0].split(',')
+        cx         = int(chunk_parts[0])
+        cy         = int(chunk_parts[1])
+        star_index = int(parts[1])
+    except (ValueError, IndexError):
+        return jsonify({'error': 'invalid starId'}), 400
+
+    dest_pos = _star_position_by_coords(cx, cy, star_index)
+    if dest_pos is None:
+        return jsonify({'error': 'star not found'}), 404
+    dest_x, dest_y = dest_pos
+
+    data = _load_colonies()
+    sources_out = []
+    for col in data['colonies']:
+        col = migrate_colony(col)
+        if col.get('status') in ('in_transit', 'abandoned'):
+            continue
+        if col.get('developmentLevel', 1) < MIN_DEV_TO_COLONIZE:
+            continue
+        pos = _star_position(col)
+        if pos is None:
+            continue
+        dist = math.sqrt((pos[0] - dest_x) ** 2 + (pos[1] - dest_y) ** 2)
+        max_range = scout_range(col['developmentLevel'])
+        if dist > max_range:
+            continue
+        can_afford = all(col['stockpiles'].get(k, 0.0) >= v for k, v in SCOUT_COST.items())
+        transit = max(1, math.ceil(dist / COLONY_SHIP_SPEED_LY_PER_TICK))
+        sources_out.append({
+            'planetId':    col['planetId'],
+            'name':        col['name'],
+            'devName':     dev_name(col),
+            'distance':    round(dist, 1),
+            'scoutRange':  max_range,
+            'transitTicks': transit,
+            'canAfford':   can_afford,
+        })
+
+    sources_out.sort(key=lambda s: s['distance'])
+
+    if not sources_out:
+        return jsonify({'eligible': False, 'reason': 'no Advanced (dev 3+) colony within scout range'})
+
+    return jsonify({'eligible': True, 'cost': SCOUT_COST, 'sources': sources_out})
+
+
+@app.route('/api/scouts', methods=['GET'])
+def api_scouts_get():
+    scouts     = _load_scouts()
+    cur_tick   = _current_tick()
+    changed    = False
+    for scout in scouts:
+        if scout['status'] == 'in_transit' and cur_tick >= scout['arrivalTick']:
+            scout['status'] = 'arrived'
+            changed = True
+    if changed:
+        _save_scouts(scouts)
+    return jsonify(scouts)
+
+
+@app.route('/api/scouts', methods=['POST'])
+def api_scouts_post():
+    body = request.get_json(force=True) or {}
+    source_pid  = body.get('sourcePlanetId', '')
+    dest_cx     = body.get('destStarCx')
+    dest_cy     = body.get('destStarCy')
+    dest_index  = body.get('destStarIndex')
+
+    if None in (dest_cx, dest_cy, dest_index):
+        return jsonify({'error': 'destStarCx, destStarCy, destStarIndex required'}), 400
+
+    dest_pos = _star_position_by_coords(int(dest_cx), int(dest_cy), int(dest_index))
+    if dest_pos is None:
+        return jsonify({'error': 'destination star not found'}), 404
+    dest_x, dest_y = dest_pos
+
+    data = _load_colonies()
+    source_col = next(
+        (migrate_colony(c) for c in data['colonies'] if c['planetId'] == source_pid), None
+    )
+    if source_col is None:
+        return jsonify({'error': 'source colony not found'}), 404
+    if source_col.get('status') in ('in_transit', 'abandoned'):
+        return jsonify({'error': 'source colony is not active'}), 400
+    if source_col.get('developmentLevel', 1) < MIN_DEV_TO_COLONIZE:
+        return jsonify({'error': 'source colony has insufficient development level'}), 400
+
+    src_pos = _star_position(source_col)
+    if src_pos is None:
+        return jsonify({'error': 'source colony star not found'}), 404
+    dist = math.sqrt((src_pos[0] - dest_x) ** 2 + (src_pos[1] - dest_y) ** 2)
+    if dist > scout_range(source_col['developmentLevel']):
+        return jsonify({'error': 'destination is out of scout range'}), 400
+
+    # Check and deduct cost
+    for res, amount in SCOUT_COST.items():
+        if source_col['stockpiles'].get(res, 0.0) < amount:
+            return jsonify({'error': f'insufficient {res} for scout probe'}), 400
+    for res, amount in SCOUT_COST.items():
+        source_col['stockpiles'][res] = round(source_col['stockpiles'].get(res, 0.0) - amount, 4)
+
+    # Persist stockpile deduction
+    for c in data['colonies']:
+        if c['planetId'] == source_pid:
+            c['stockpiles'] = source_col['stockpiles']
+            break
+    _save_colonies(data)
+
+    # Create scout record
+    cur_tick     = _current_tick()
+    transit      = max(1, math.ceil(dist / COLONY_SHIP_SPEED_LY_PER_TICK))
+    star_id      = f'{dest_cx},{dest_cy}:{dest_index}'
+    scout = {
+        'scoutId':       str(uuid4()),
+        'sourcePlanetId': source_pid,
+        'destStarId':    star_id,
+        'destWorldX':    dest_x,
+        'destWorldY':    dest_y,
+        'status':        'in_transit',
+        'launchedAtTick': cur_tick,
+        'transitTicks':  transit,
+        'arrivalTick':   cur_tick + transit,
+    }
+
+    scouts = _load_scouts()
+    scouts.append(scout)
+    _save_scouts(scouts)
+
+    return jsonify(scout), 201
 
 
 if __name__ == '__main__':

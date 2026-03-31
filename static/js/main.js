@@ -1,12 +1,11 @@
 import { Camera } from './camera.js'
 import { Viewport } from './viewport.js'
 import { GalaxyClient } from './galaxy_client.js'
-import { Ship } from './ship.js'
-import { ExplorationTracker } from './exploration_tracker.js'
 import { InputHandler } from './input_handler.js'
 import { Renderer } from './renderer.js'
 import { ColonyManager } from './colony_manager.js'
 import { RouteManager } from './route_manager.js'
+import { ScoutManager } from './scout_manager.js'
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
@@ -26,9 +25,6 @@ const config = galaxyClient.config
 // ── Game objects ──────────────────────────────────────────────────────────────
 
 const camera = new Camera(0, 0, 0.4)
-const ship   = new Ship(0, 0, 100)
-const explorationTracker = new ExplorationTracker()
-explorationTracker.restore()
 
 // ── Colony manager ────────────────────────────────────────────────────────────
 
@@ -36,7 +32,6 @@ const colonyManager = new ColonyManager()
 colonyManager.init().then(() => {
   const hw = colonyManager.homeworld
   if (hw?.star) {
-    ship.setDestination(hw.star.worldX, hw.star.worldY)
     camera.worldX = hw.star.worldX
     camera.worldY = hw.star.worldY
   }
@@ -47,13 +42,23 @@ colonyManager.init().then(() => {
 const routeManager = new RouteManager()
 routeManager.init()
 
+// ── Scout manager ─────────────────────────────────────────────────────────────
+
+const scoutManager = new ScoutManager()
+scoutManager.init().then(() => {
+  colonyManager.setArrivedScouts(scoutManager.arrivedScouts)
+})
+
 // ── Renderer & input ──────────────────────────────────────────────────────────
 
 const renderer = new Renderer(ctx, camera, galaxyClient, colonyManager, routeManager)
-const input    = new InputHandler(canvas, camera, ship, viewport)
+const input    = new InputHandler(canvas, camera, viewport)
 
 input.onDebugToggle  = () => { renderer.showDebug = !renderer.showDebug }
-input.onCameraReset  = () => { camera.worldX = ship.worldX; camera.worldY = ship.worldY }
+input.onCameraReset  = () => {
+  const hw = colonyManager.homeworld
+  if (hw?.star) { camera.worldX = hw.star.worldX; camera.worldY = hw.star.worldY }
+}
 input.onRoutesToggle = () => {
   if (routesPanel?.style.display === 'none' || !routesPanel?.style.display) {
     openRoutesPanel()
@@ -347,6 +352,13 @@ function openColonyPanel(planet, system) {
 
 // Refresh panel if it's open and colony data was updated by polling
 colonyManager.onUpdate = () => {
+  // Refresh scout data and update visibility circles
+  scoutManager.refresh().then(() => {
+    colonyManager.setArrivedScouts(scoutManager.arrivedScouts)
+    if (scoutPanel.style.display !== 'none' && _scoutPanelStar) {
+      _refreshScoutPanelProbes(_scoutPanelStar.id)
+    }
+  })
   if (colonyListPanel?.style.display !== 'none') _renderColonyList()
   if (colonyPanel.style.display === 'none' || !_panelPlanet) return
   const col = colonyManager.getColony(_panelPlanet.id)
@@ -368,15 +380,28 @@ colonyManager.onUpdate = () => {
 }
 
 input.onCanvasClick = () => {
+  // System view: planet click → colony panel
   const planet = renderer.hoveredPlanet
-  if (!planet) {
-    colonyPanel.style.display = 'none'
+  if (planet) {
+    scoutPanel.style.display = 'none'
+    const bounds  = camera.getViewportBounds(viewport.width, viewport.height)
+    const systems = galaxyClient.getSystemsInViewport(bounds)
+    const system  = systems.find(s => s.planets.some(p => p.id === planet.id))
+    if (system) openColonyPanel(planet, system)
     return
   }
-  const bounds  = camera.getViewportBounds(viewport.width, viewport.height)
-  const systems = galaxyClient.getSystemsInViewport(bounds)
-  const system  = systems.find(s => s.planets.some(p => p.id === planet.id))
-  if (system) openColonyPanel(planet, system)
+
+  // Galaxy view: star click → scout panel
+  const star = renderer.hoveredStar
+  if (star) {
+    colonyPanel.style.display = 'none'
+    openScoutPanel(star)
+    return
+  }
+
+  // Nothing hovered → close panels
+  colonyPanel.style.display = 'none'
+  scoutPanel.style.display  = 'none'
 }
 
 cpCloseBtn.addEventListener('click', () => {
@@ -421,6 +446,116 @@ cpUpgradeBtn.addEventListener('click', async () => {
   } catch (err) {
     cpUpgradeBtn.disabled    = false
     cpStatus.innerHTML = `<span style="color:#cc4444;font-size:10px">${err.message}</span>`
+  }
+})
+
+// ── Scout panel ───────────────────────────────────────────────────────────────
+
+const scoutPanel         = document.getElementById('scout-panel')
+const spTitle            = document.getElementById('scout-panel-title')
+const spSubtitle         = document.getElementById('scout-panel-subtitle')
+const spStatus           = document.getElementById('scout-panel-status')
+const spSourceRow        = document.getElementById('scout-panel-source-row')
+const spSourceSelect     = document.getElementById('scout-panel-source-select')
+const spInfo             = document.getElementById('scout-panel-info')
+const spSendBtn          = document.getElementById('scout-panel-send')
+const spProbes           = document.getElementById('scout-panel-probes')
+const spCloseBtn         = document.getElementById('scout-panel-close-btn')
+
+let _scoutPanelStar = null
+
+function _refreshScoutPanelProbes(starId) {
+  const probes = scoutManager.scouts.filter(s => s.destStarId === starId)
+  if (!probes.length) { spProbes.innerHTML = ''; return }
+  spProbes.innerHTML = '<div class="cp-section-label" style="margin-top:8px">Active Probes</div>' +
+    probes.map(p => {
+      const label = p.status === 'arrived' ? '✓ Arrived' : `▶ ${p.transitTicks - Math.max(0, p.arrivalTick - (Date.now() / 60000 | 0))} ticks remaining`
+      return `<div class="scout-probe-entry">${label}</div>`
+    }).join('')
+}
+
+async function openScoutPanel(star) {
+  _scoutPanelStar   = star
+  spTitle.textContent    = star.name ?? `Star ${star.id}`
+  spSubtitle.textContent = `${star.spectralClass}${star.subclass ?? ''}  ·  ${star.worldX.toFixed(0)}, ${star.worldY.toFixed(0)} Ly`
+  spStatus.innerHTML     = ''
+  spSourceRow.style.display = 'none'
+  spSourceSelect.innerHTML  = ''
+  spInfo.innerHTML       = ''
+  spSendBtn.style.display = 'none'
+  spProbes.innerHTML     = ''
+
+  _refreshScoutPanelProbes(star.id)
+
+  scoutPanel.style.display = 'block'
+
+  // Fetch preview async
+  spStatus.innerHTML = '<span style="color:#445566;font-size:10px">Checking range...</span>'
+  try {
+    const preview = await fetch(`/api/scout-preview?starId=${encodeURIComponent(star.id)}`).then(r => r.json())
+    if (!preview.eligible) {
+      spStatus.innerHTML = `<div style="font-size:10px;color:#cc4444">${preview.reason ?? 'No eligible source'}</div>`
+      spSendBtn.style.display = 'none'
+      return
+    }
+    spStatus.innerHTML = ''
+
+    const costStr = Object.entries(preview.cost ?? {})
+      .map(([k, v]) => `${v} ${RES_LABELS[k] ?? k}`).join(' · ')
+
+    spSourceSelect.innerHTML = ''
+    for (const src of preview.sources) {
+      const opt = document.createElement('option')
+      opt.value       = src.planetId
+      opt.textContent = `${src.name} (${src.devName})  ${src.distance} Ly`
+      if (!src.canAfford) opt.style.color = '#cc4444'
+      spSourceSelect.appendChild(opt)
+    }
+    spSourceRow.style.display = 'block'
+    spSendBtn.style.display   = 'block'
+
+    function _applyScoutSelection() {
+      const src = preview.sources.find(s => s.planetId === spSourceSelect.value)
+      if (!src) return
+      spInfo.innerHTML =
+        `<div style="font-size:10px;line-height:1.9;color:#556677">` +
+        `Cost: <span style="color:#88aacc">${costStr}</span><br>` +
+        `Transit: <span style="color:#88aacc">~${src.transitTicks} min</span><br>` +
+        `<span style="color:${src.canAfford ? '#66cc88' : '#cc4444'}">${src.canAfford ? 'Affordable' : 'INSUFFICIENT FUNDS'}</span></div>`
+      spSendBtn.disabled = !src.canAfford
+    }
+
+    _applyScoutSelection()
+    spSourceSelect.addEventListener('change', _applyScoutSelection)
+  } catch {
+    spStatus.innerHTML = '<span style="color:#cc4444;font-size:10px">Failed to load preview</span>'
+  }
+}
+
+spCloseBtn.addEventListener('click', () => {
+  scoutPanel.style.display = 'none'
+  _scoutPanelStar = null
+})
+
+spSendBtn.addEventListener('click', async () => {
+  if (!_scoutPanelStar) return
+  spSendBtn.disabled    = true
+  spSendBtn.textContent = 'Launching...'
+  try {
+    await scoutManager.launchScout(
+      spSourceSelect.value,
+      _scoutPanelStar.id,
+      _scoutPanelStar.worldX,
+      _scoutPanelStar.worldY,
+    )
+    colonyManager.setArrivedScouts(scoutManager.arrivedScouts)
+    spSendBtn.textContent = 'Launched ✓'
+    spInfo.innerHTML      = '<div style="font-size:10px;color:#66cc88">Scout probe launched!</div>'
+    _refreshScoutPanelProbes(_scoutPanelStar.id)
+  } catch (err) {
+    spSendBtn.disabled    = false
+    spSendBtn.textContent = 'Send Scout Probe'
+    spStatus.innerHTML    = `<span style="color:#cc4444;font-size:10px">${err.message}</span>`
   }
 })
 
@@ -888,52 +1023,26 @@ const hudSeed   = document.getElementById('hud-seed')
 
 if (hudSeed) hudSeed.textContent = String(config.seed)
 
-// ── Pre-fetch initial viewport area ──────────────────────────────────────────
-
-;(() => {
-  const r    = config.galaxyRadiusLy * 0.6
-  const step = config.chunkSizeLy * 8
-  for (let x = -r; x <= r; x += step) {
-    for (let y = -r; y <= r; y += step) {
-      galaxyClient.getStarsInViewport({ minX: x, minY: y, maxX: x + 1, maxY: y + 1 })
-    }
-  }
-})()
-
 // ── Game loop ─────────────────────────────────────────────────────────────────
 
-let lastTime    = 0
-let lastPersist = 0
+let lastTime = 0
 
 function gameLoop(timestamp) {
-  const dtMs  = Math.min(timestamp - lastTime, 100)
-  const dtSec = dtMs / 1000
   lastTime = timestamp
 
   input.update()
-  ship.update(dtSec)
 
-  const shipBounds = ship.getExplorationBounds()
   const viewBounds = camera.getViewportBounds(viewport.width, viewport.height)
 
-  galaxyClient.getStarsInViewport(shipBounds)
-  explorationTracker.markExploredBounds(
-    shipBounds.minX, shipBounds.minY, shipBounds.maxX, shipBounds.maxY,
-    config.chunkSizeLy,
-  )
-
-  if (timestamp - lastPersist > 5000) {
-    explorationTracker.persist()
-    lastPersist = timestamp
-  }
+  galaxyClient.setVisibilityCircles(colonyManager.visibilityCircles)
 
   const stars = galaxyClient.getStarsInViewport(viewBounds)
-  renderer.render(viewport.width, viewport.height, ship, stars.length)
+  renderer.render(viewport.width, viewport.height, stars.length)
 
-  if (hudPos)    hudPos.textContent    = `${ship.worldX.toFixed(0)}, ${ship.worldY.toFixed(0)} Ly`
+  if (hudPos)    hudPos.textContent    = `${camera.worldX.toFixed(0)}, ${camera.worldY.toFixed(0)} Ly`
   if (hudZoom)   hudZoom.textContent   = `${camera.zoom.toFixed(4)} px/Ly`
   if (hudStars)  hudStars.textContent  = String(stars.length)
-  if (hudChunks) hudChunks.textContent = `${galaxyClient.generatedChunkCount} (${explorationTracker.count} explored)`
+  if (hudChunks) hudChunks.textContent = String(galaxyClient.generatedChunkCount)
 
   requestAnimationFrame(gameLoop)
 }

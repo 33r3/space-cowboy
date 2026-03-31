@@ -4,20 +4,47 @@
  * Replaces GalaxyManager + ChunkRegistry from the TypeScript version.
  */
 export class GalaxyClient {
-  #chunkCache  = new Map()   // "cx,cy" → StarData[]
-  #systemCache = new Map()   // starId  → SystemData
-  #inflight    = new Set()   // chunk keys currently being fetched
-  #sysInflight = new Set()   // star ids currently being fetched
-  #config      = null
+  #chunkCache         = new Map()   // "cx,cy" → StarData[]
+  #systemCache        = new Map()   // starId  → SystemData
+  #inflight           = new Set()   // chunk keys currently being fetched
+  #sysInflight        = new Set()   // star ids currently being fetched
+  #config             = null
+  #visibilityCircles  = []          // set each frame by main.js
 
   async init() {
     this.#config = await fetch('/api/config').then(r => r.json())
   }
 
+  // ── Visibility filtering ────────────────────────────────────────────────────
+
+  setVisibilityCircles(circles) {
+    this.#visibilityCircles = circles
+  }
+
+  #isStarVisible(star) {
+    if (!this.#visibilityCircles.length) return false
+    for (const c of this.#visibilityCircles) {
+      const dx = star.worldX - c.worldX
+      const dy = star.worldY - c.worldY
+      if (dx * dx + dy * dy <= c.starRadiusLy * c.starRadiusLy) return true
+    }
+    return false
+  }
+
+  #isPlanetVisible(star) {
+    if (!this.#visibilityCircles.length) return false
+    for (const c of this.#visibilityCircles) {
+      const dx = star.worldX - c.worldX
+      const dy = star.worldY - c.worldY
+      if (dx * dx + dy * dy <= c.planetRadiusLy * c.planetRadiusLy) return true
+    }
+    return false
+  }
+
   // ── Synchronous accessors (return what's cached, kick off fetches) ──────────
 
   /**
-   * Returns stars currently cached in the viewport bounds.
+   * Returns visible stars currently cached in the viewport bounds.
    * Kicks off async fetches for missing chunks (non-blocking).
    */
   getStarsInViewport(bounds) {
@@ -33,7 +60,8 @@ export class GalaxyClient {
       if (cached) {
         for (const star of cached) {
           if (star.worldX >= bounds.minX && star.worldX <= bounds.maxX &&
-              star.worldY >= bounds.minY && star.worldY <= bounds.maxY) {
+              star.worldY >= bounds.minY && star.worldY <= bounds.maxY &&
+              this.#isStarVisible(star)) {
             stars.push(star)
           }
         }
@@ -50,28 +78,41 @@ export class GalaxyClient {
   }
 
   /**
-   * Returns systems for all stars in viewport that are already cached.
+   * Returns systems for visible stars in viewport that are already cached.
    * Kicks off async fetches for missing systems.
    */
   getSystemsInViewport(bounds) {
-    const stars   = this.getStarsInViewport(bounds)
-    const systems = []
+    // Use raw star list (unfiltered by star visibility) then apply planet visibility
+    if (!this.#config) return []
 
-    for (const star of stars) {
+    const coords = this.#chunksInBounds(bounds)
+    const allStars = []
+
+    for (const [cx, cy] of coords) {
+      const key    = `${cx},${cy}`
+      const cached = this.#chunkCache.get(key)
+      if (cached) {
+        for (const star of cached) {
+          if (star.worldX >= bounds.minX && star.worldX <= bounds.maxX &&
+              star.worldY >= bounds.minY && star.worldY <= bounds.maxY) {
+            allStars.push(star)
+          }
+        }
+      }
+    }
+
+    const systems = []
+    for (const star of allStars) {
+      if (!this.#isPlanetVisible(star)) continue
       const cached = this.#systemCache.get(star.id)
       if (cached) {
         systems.push(cached)
       } else if (!this.#sysInflight.has(star.id)) {
-        const [cx, cy, index] = star.id.split(':').map((p, i) => {
-          if (i < 2) return parseInt(p)
-          return parseInt(p)
-        })
-        // star.id format: "cx,cy:index"
-        const parts = star.id.split(':')
+        const parts      = star.id.split(':')
         const chunkParts = parts[0].split(',')
-        const starCx    = parseInt(chunkParts[0])
-        const starCy    = parseInt(chunkParts[1])
-        const starIndex = parseInt(parts[1])
+        const starCx     = parseInt(chunkParts[0])
+        const starCy     = parseInt(chunkParts[1])
+        const starIndex  = parseInt(parts[1])
         this.#fetchSystem(starCx, starCy, starIndex, star.id)
       }
     }

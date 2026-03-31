@@ -22,6 +22,14 @@ from generation.colony_economics import TICK_SECONDS
 
 # ── Ship classes ───────────────────────────────────────────────────────────────
 
+SCOUT_COST: dict[str, float] = {
+    'minerals':     30.0,
+    'metals':       20.0,
+    'organicFuels':  5.0,
+    'radioactives':  2.0,
+    'fusionFuel':    5.0,
+}
+
 SHIP_CLASSES: dict[str, dict] = {
     'freighter_mk1': {
         'id':             'freighter_mk1',

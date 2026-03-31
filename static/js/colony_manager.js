@@ -3,13 +3,19 @@
  * Communicates with /api/homeworld and /api/colonies.
  * Polls /api/colonies every 30 seconds to pick up tick-advanced state.
  */
+// mirrors colony_economics.py COLONIZATION_RANGE_LY
+const COLONIZATION_RANGE_LY = { 3: 300, 4: 600, 5: 1200 }
+const STAR_VIS_MULTIPLIER   = 4
+const PLANET_VIS_MULTIPLIER = 2
+
 export class ColonyManager {
-  #homeworldData = null   // full API response (planet, star, cx, cy, starIndex)
-  #colonyIds     = new Set()
-  #colonies      = []     // enriched colony records from server
-  #ready         = false
-  #onUpdate      = null   // callback fired after each poll refresh
-  #pollInterval  = null
+  #homeworldData  = null   // full API response (planet, star, cx, cy, starIndex)
+  #colonyIds      = new Set()
+  #colonies       = []     // enriched colony records from server
+  #ready          = false
+  #onUpdate       = null   // callback fired after each poll refresh
+  #pollInterval   = null
+  #arrivedScouts  = []     // injected from ScoutManager each poll
 
   async init() {
     await Promise.all([this.#fetchHomeworld(), this.#fetchColonies()])
@@ -23,6 +29,51 @@ export class ColonyManager {
   get ready()      { return this.#ready }
   get homeworld()  { return this.#homeworldData }
   get colonies()   { return this.#colonies }
+
+  setArrivedScouts(scouts) { this.#arrivedScouts = scouts }
+
+  /**
+   * Returns visibility circles for all active colonies and arrived scouts.
+   * Each circle: { worldX, worldY, starRadiusLy, planetRadiusLy }
+   */
+  get visibilityCircles() {
+    const circles = []
+
+    for (const col of this.#colonies) {
+      if (col.status === 'abandoned') continue
+      const dev   = col.developmentLevel ?? 1
+      const range = COLONIZATION_RANGE_LY[dev] ?? 0
+      if (!range || !col.planet) continue
+      circles.push({
+        worldX:        col.planet.worldX,
+        worldY:        col.planet.worldY,
+        starRadiusLy:   range * STAR_VIS_MULTIPLIER,
+        planetRadiusLy: range * PLANET_VIS_MULTIPLIER,
+      })
+    }
+
+    // Homeworld (not always in colonies list if just initialized)
+    const hw = this.#homeworldData
+    if (hw?.planet && !this.#colonies.some(c => c.planetId === hw.planet.id)) {
+      circles.push({
+        worldX:        hw.planet.worldX,
+        worldY:        hw.planet.worldY,
+        starRadiusLy:   300 * STAR_VIS_MULTIPLIER,
+        planetRadiusLy: 300 * PLANET_VIS_MULTIPLIER,
+      })
+    }
+
+    for (const scout of this.#arrivedScouts) {
+      circles.push({
+        worldX:        scout.destWorldX,
+        worldY:        scout.destWorldY,
+        starRadiusLy:   300 * STAR_VIS_MULTIPLIER,
+        planetRadiusLy: 300 * PLANET_VIS_MULTIPLIER,
+      })
+    }
+
+    return circles
+  }
 
   /** Called after each background poll — use to refresh open colony panel. */
   set onUpdate(fn) { this.#onUpdate = fn }

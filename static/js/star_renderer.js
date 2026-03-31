@@ -90,6 +90,26 @@ export class StarRenderer {
     }
   }
 
+  /**
+   * Returns the star nearest the cursor within HIT_RADIUS_PX, or null.
+   * Only meaningful when zoom < SYSTEM_ZOOM_THRESHOLD (galaxy view).
+   */
+  updateHover(stars, mouseX, mouseY, camera, canvasW, canvasH) {
+    const HIT_RADIUS_PX = 12
+    let nearest = null
+    let nearestDist = HIT_RADIUS_PX
+
+    for (const star of stars) {
+      const { sx, sy } = camera.worldToScreen(star.worldX, star.worldY, canvasW, canvasH)
+      const d = Math.sqrt((sx - mouseX) ** 2 + (sy - mouseY) ** 2)
+      if (d < nearestDist) {
+        nearestDist = d
+        nearest = star
+      }
+    }
+    return nearest
+  }
+
   _renderClose(stars, camera, canvasW, canvasH) {
     const ctx = this.ctx
 
