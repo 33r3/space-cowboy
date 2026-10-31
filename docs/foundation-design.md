@@ -149,7 +149,20 @@ Not decided (game design, for later steps):
   (by colony size x dev? first come? each gets its own share?).
 - Diplomacy: whether "peaceful" sharing is a formal agreement in the game.
 
-## Open questions for Brent (not blocking step 1)
+## Where new players start (Brent, 2026-10-31: a decent-sized buffer)
 
-- Where new players start: their own generated homeworld somewhere in the
-  galaxy (spread apart, or near others?). Today there is one homeworld.
+Homeworld-grade planets (Terran, habitability >= 80) are not rare:
+sampling 469 chunks found ~0.5 per 200 Ly chunk, ~1.5 near the core and
+~0.1 at the rim, roughly 100,000 in the galaxy. Today's spiral search
+would put every player on the same first one (it's in chunk 0,0), so
+spacing has to be enforced:
+
+- Each new player gets the nearest homeworld-grade planet to the core
+  that is at least HOMEWORLD_BUFFER_LY from every other homeworld.
+- HOMEWORLD_BUFFER_LY = 1500 to start (a tuning knob): more than the
+  best colonization range (1200 Ly at dev 5), so nobody can settle next
+  door from the start; scouts (up to 1800 Ly) can find neighbours
+  mid-game. 500 players at that spacing use ~11% of the galaxy's area.
+- Filling outward from the core means later players land farther out,
+  where planets are sparser; whether to compensate is a later balance
+  question.
