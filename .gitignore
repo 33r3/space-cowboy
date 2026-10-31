@@ -6,3 +6,7 @@ dist/
 __pycache__/
 *.pyc
 *.pyo
+.venv/
+data/colonies.json
+data/routes.json
+data/scouts.json
