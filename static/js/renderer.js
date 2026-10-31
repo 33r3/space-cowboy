@@ -58,6 +58,7 @@ export class Renderer {
     // ── Stars ─────────────────────────────────────────────────────────────────
     const stars = this.galaxyClient.getStarsInViewport(bounds)
     this._starRenderer.render(stars, camera, canvasW, canvasH)
+    this._starRenderer.renderKnown(stars, id => this.galaxyClient.isKnown(id), camera, canvasW, canvasH)
     // Only track hovered star when not in system view (planet hover takes priority)
     this._hoveredStar = camera.zoom < SYSTEM_ZOOM_THRESHOLD
       ? this._starRenderer.updateHover(stars, this.mouseX, this.mouseY, camera, canvasW, canvasH)

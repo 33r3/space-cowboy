@@ -13,15 +13,31 @@ export class GalaxyClient {
   #sysInflight        = new Set()   // star ids currently being fetched
   #config             = null
   #unsurveyedAt       = new Map()   // starId → when an unsurveyed answer was cached
+  #known              = new Set()   // star ids whose planets the player knows
 
   async init() {
     this.#config = await fetch('/api/config').then(r => r.json())
+    this.refreshKnown()
+    setInterval(() => this.refreshKnown(), 60_000)   // colonies develop, sensors grow
+  }
+
+  /** Which systems the player knows (marked on the map). */
+  async refreshKnown() {
+    try {
+      const data = await fetch('/api/known').then(r => r.json())
+      this.#known = new Set(data.starIds)
+    } catch { /* keep the old set */ }
+  }
+
+  isKnown(starId) {
+    return this.#known.has(starId)
   }
 
   /** Forget every unsurveyed system so the next frame asks again. */
   forgetUnsurveyed() {
     for (const starId of this.#unsurveyedAt.keys()) this.#systemCache.delete(starId)
     this.#unsurveyedAt.clear()
+    this.refreshKnown()
   }
 
   // ── Synchronous accessors (return what's cached, kick off fetches) ──────────

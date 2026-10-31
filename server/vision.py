@@ -66,6 +66,17 @@ class Vision:
                 return True
         return False
 
+    def known_star_ids(self) -> set[str]:
+        """Every system the player knows: surveyed ones plus those inside
+        their colonies' sensor ranges (at most 400 Ly each, so small)."""
+        self._load()
+        known = set(self._surveyed)
+        for own_star, (x, y), reach in self._sensors:
+            known.add(own_star)
+            if reach > 0:
+                known.update(stars_near(self.galaxy, x, y, reach))
+        return known
+
     def knows_planet(self, planet_id: str) -> bool:
         return self.knows(star_of_planet(planet_id))
 

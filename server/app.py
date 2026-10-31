@@ -302,6 +302,11 @@ def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for ever
             if system['surveyed'] else []            # unknown worlds: the star only
         return system
 
+    @api.get('/api/known')
+    def api_known(w: World_ = W):
+        """The systems whose planets the caller knows, to mark on the map."""
+        return {'starIds': sorted(w.vision.known_star_ids())}
+
     @api.get('/api/homeworld')
     def api_homeworld(w: World_ = W):
         hw = find_homeworld(game.config, game.density_field)

@@ -87,3 +87,14 @@ def test_other_players_cannot_see_your_systems(client):
     client.as_player(2)
     s = system(client, HOME_STAR)
     assert not s['surveyed'] and s['planets'] == []
+
+
+def test_known_lists_sensor_range_and_surveys(client):
+    known = set(client.get('/api/known').get_json()['starIds'])
+    assert HOME_STAR in known and NEAR_STAR not in known
+    assert set(stars_between(0, SENSOR_RANGE_LY[3])) <= known
+    assert not known & set(stars_between(SENSOR_RANGE_LY[3] + 1, 300))
+    client.survey(NEAR_STAR)
+    assert NEAR_STAR in client.get('/api/known').get_json()['starIds']
+    client.as_player(2)
+    assert client.get('/api/known').get_json()['starIds'] == []

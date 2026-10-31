@@ -27,6 +27,26 @@ export class StarRenderer {
     }
   }
 
+  /** A teal ring around every star whose planets the player knows. */
+  renderKnown(stars, isKnown, camera, canvasW, canvasH) {
+    if (camera.zoom >= 15) return              // close up the system itself shows it
+    const ctx = this.ctx
+    const r = camera.zoom < 0.08 ? 2.5 : 4
+    ctx.save()
+    ctx.strokeStyle = 'rgba(68, 255, 204, 0.55)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    for (const star of stars) {
+      if (!isKnown(star.id)) continue
+      const { sx, sy } = camera.worldToScreen(star.worldX, star.worldY, canvasW, canvasH)
+      if (sx < -10 || sx > canvasW + 10 || sy < -10 || sy > canvasH + 10) continue
+      ctx.moveTo(sx + r, sy)
+      ctx.arc(sx, sy, r, 0, TWO_PI)
+    }
+    ctx.stroke()
+    ctx.restore()
+  }
+
   _renderOverview(stars, camera, canvasW, canvasH) {
     const dpr = window.devicePixelRatio || 1
     const pw  = Math.round(canvasW * dpr)
