@@ -8,9 +8,15 @@ Resources flow each tick:
 
 Colony size grows after GROWTH_TICKS_NEEDED consecutive well-fed ticks.
 Development level can be upgraded by spending stockpile resources.
+
+A colony dict may carry its planet's current 'habitability' (0-100). Then
+harsh worlds cost life support and cap the colony's size (terraform.py);
+without it (old saves, the Flask app) neither applies.
 """
 import copy
 from datetime import datetime, timezone
+
+from .terraform import SHRINK_TICKS, life_support, size_cap
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -142,6 +148,11 @@ def consumption_per_tick(colony: dict) -> dict[str, float]:
         for k, base in DEV_CONSUMPTION.get(level, {}).items():
             result[k] = round(result.get(k, 0.0) + base * s * d, 3)
 
+    # Life support on harsh worlds scales with size only
+    if 'habitability' in colony:
+        for k, v in life_support(colony['habitability'], s).items():
+            result[k] = round(result.get(k, 0.0) + v, 3)
+
     # Pad missing keys with 0 so callers don't need to handle KeyError
     for r in ALL_RESOURCES:
         result.setdefault(r, 0.0)
@@ -216,13 +227,25 @@ def apply_ticks(colony: dict, planet_yields: dict, n_ticks: int) -> dict:
         else:
             colony['growthProgress'] = max(0, colony.get('growthProgress', 0) - 1)
 
-        # Size increase
-        if colony['growthProgress'] >= GROWTH_TICKS_NEEDED and colony['size'] < 5:
-            colony['size']          += 1
-            colony['growthProgress'] = 0
-            # Recalculate rates for new size
-            ext = extraction_per_tick(colony, planet_yields)
-            con = consumption_per_tick(colony)
+        # Size increase, up to what the planet can hold; a colony above that
+        # (its world was made harsher) loses a size every SHRINK_TICKS
+        cap = size_cap(colony['habitability']) if 'habitability' in colony else 5
+        if colony['size'] > cap:
+            colony['overCapTicks'] = colony.get('overCapTicks', 0) + 1
+            if colony['overCapTicks'] >= SHRINK_TICKS:
+                colony['size'] -= 1
+                colony['overCapTicks'] = 0
+                colony['growthProgress'] = 0
+                ext = extraction_per_tick(colony, planet_yields)
+                con = consumption_per_tick(colony)
+        else:
+            colony['overCapTicks'] = 0
+            if colony['growthProgress'] >= GROWTH_TICKS_NEEDED and colony['size'] < cap:
+                colony['size']          += 1
+                colony['growthProgress'] = 0
+                # Recalculate rates for new size
+                ext = extraction_per_tick(colony, planet_yields)
+                con = consumption_per_tick(colony)
 
     colony['stockpiles'] = stockpiles
     return colony

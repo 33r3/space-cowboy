@@ -18,7 +18,10 @@ from .models import (Colony, Event, Notification, Planet, Player, Route, RouteLe
                      Stockpile, World)
 from .units import fixed_map, now_tick, tick_of
 
-HOMEWORLD_OVERRIDE_KEYS = ('biosphere', 'habitability', 'colonyYields')
+def homeworld_overrides(planet: dict) -> dict:
+    """The homeworld's fixes (generation/homeworld.py): complex life and
+    yields that can sustain every development level."""
+    return {'biosphere': planet['biosphere'], 'yieldFloor': planet['colonyYields']}
 
 
 def _tick(iso: str) -> int:
@@ -44,7 +47,7 @@ def import_saves(session, colonies_data: dict, routes_data: dict, scouts: list,
     if homeworld:
         p = homeworld['planet']
         session.add(Planet(planet_id=p['id'], updated_tick=now,
-                           overrides={k: p[k] for k in HOMEWORLD_OVERRIDE_KEYS}))
+                           overrides=homeworld_overrides(p)))
 
     by_planet: dict[str, Colony] = {}
     old_by_planet: dict[str, dict] = {}

@@ -63,7 +63,7 @@ def test_import_round_trip(flask_client, clock, session):
     route = session.scalars(select(Route)).one()
     assert [l.idx for l in route.legs] == [0, 1] and route.ship_id == ships['freighter'].id
     hw = session.get(Planet, HOMEWORLD)
-    assert hw.overrides['colonyYields']['metals'] >= 0.15
+    assert hw.overrides['yieldFloor']['metals'] >= 0.15
 
 
 def test_import_of_an_empty_save(session, clock):

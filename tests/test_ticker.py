@@ -28,10 +28,10 @@ def s():
         yield session
 
 
-def colony(s, where, status='active', size=1, dev=1, stock=None, **kw):
+def colony(s, where, status='active', size=1, dev=1, stock=None, owner_id=1, **kw):
     pid, cx, cy, star = where
     amounts = {r: 0.0 for r in ALL_RESOURCES} | (stock or {})
-    col = Colony(owner_id=1, planet_id=pid, name=pid, cx=cx, cy=cy, star_index=star,
+    col = Colony(owner_id=owner_id, planet_id=pid, name=pid, cx=cx, cy=cy, star_index=star,
                  founded_tick=T0, status=status, size=size, dev_level=dev,
                  growth_progress=0, starvation_ticks=0, is_homeworld=False,
                  stockpiles=[Stockpile(resource=r, amount=v)

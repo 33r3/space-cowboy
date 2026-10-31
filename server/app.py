@@ -24,11 +24,12 @@ from sqlalchemy.orm import Session
 
 from generation.chunk_generator import chunks_in_bounds, generate_chunk
 from generation.colony_economics import (
-    ALL_RESOURCES, COLONY_SHIP_SPEED_LY_PER_TICK, MIN_DEV_TO_COLONIZE, STARTER_STOCKPILES,
+    ALL_RESOURCES, COLONY_SHIP_SPEED_LY_PER_TICK, MIN_DEV_TO_COLONIZE, SIZE_MULT, STARTER_STOCKPILES,
     TICK_SECONDS, apply_upgrade_dev, can_upgrade_dev, colonization_cost, colonization_range,
     consumption_per_tick, dev_name, extraction_per_tick, net_flow_per_tick, scout_range,
     size_name, upgrade_cost,
 )
+from generation import terraform as tf
 from generation.config import DEFAULT_CONFIG
 from generation.density_field import DensityField
 from generation.homeworld import find_homeworld
@@ -38,10 +39,10 @@ from generation.trade_routes import (
 )
 
 from .db import make_engine, make_sessionmaker
-from .galaxy import Galaxy, split_star_id
-from .importer import HOMEWORLD_OVERRIDE_KEYS
+from .galaxy import Galaxy, split_planet_id, split_star_id
+from .importer import homeworld_overrides
 from .models import (Colony, Event, Notification, Planet, Player, Route, RouteLeg, Ship,
-                     Stockpile, World)
+                     Stockpile, TerraformProject, World)
 from .ticker import advance, colony_dict, stockpiles
 from .units import fixed_map, float_map, now_tick, time_of, to_fixed
 
@@ -140,8 +141,19 @@ class World_:
         self.s, self.game, self.galaxy, self.player = s, game, game.galaxy, player
 
     def planet(self, planet_id: str) -> dict | None:
+        """The planet as it is now, with its live terraforming projects."""
         row = self.s.get(Planet, planet_id)
-        return self.galaxy.planet(planet_id, row.overrides if row else None)
+        p = self.galaxy.planet(planet_id, row.overrides if row else None)
+        if p is not None and row is not None:
+            p['terraforming'] = {**p.get('terraforming', {}), 'activeProjects': [
+                {'lever': pr.lever, 'target': pr.target, 'status': pr.status}
+                for pr in self.live_projects(planet_id)]}
+        return p
+
+    def live_projects(self, planet_id: str) -> list[TerraformProject]:
+        return list(self.s.scalars(select(TerraformProject).where(
+            TerraformProject.planet_id == planet_id,
+            TerraformProject.status.in_(('active', 'stalled'))).order_by(TerraformProject.id)))
 
     def colonies(self) -> list[Colony]:
         return list(self.s.scalars(select(Colony).where(Colony.owner_id == self.player.id)
@@ -194,8 +206,12 @@ class World_:
                     'transitProgressPct': round(min(100.0, elapsed / max(1, transit * TICK_SECONDS) * 100), 1),
                     'ticksRemaining': max(0.0, round(transit - elapsed / TICK_SECONDS, 1))}
         yields = rec['colonyYields']
+        hab = planet['habitability']['total'] if planet else 100
+        d['habitability'] = hab
         ok, _ = can_upgrade_dev(d)
         return {**rec,
+                'habitability': hab, 'sizeCap': tf.size_cap(hab),
+                'lifeSupportPerTick': tf.life_support(hab, SIZE_MULT[col.size - 1]),
                 'extractionPerTick': extraction_per_tick(d, yields),
                 'consumptionPerTick': consumption_per_tick(d),
                 'netFlowPerTick': net_flow_per_tick(d, yields),
@@ -290,7 +306,7 @@ def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for ever
         p = hw['planet']
         if w.s.get(Planet, p['id']) is None:
             w.s.add(Planet(planet_id=p['id'], updated_tick=now_tick(),
-                           overrides={k: p[k] for k in HOMEWORLD_OVERRIDE_KEYS}))
+                           overrides=homeworld_overrides(p)))
         if _owned(w.s, w.player, p['id']) is None:
             w.s.add(Colony(owner_id=w.player.id, planet_id=p['id'], name=p['name'],
                            cx=hw['cx'], cy=hw['cy'], star_index=hw['starIndex'],
@@ -519,6 +535,126 @@ def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for ever
     def api_route_events_read(route_id: str, w: World_ = W):
         r = _owned_route(w, route_id)
         for n in w.s.scalars(select(Notification).where(Notification.route_id == r.id)):
+            n.read = True
+        return {'ok': True}
+
+    # ── Terraforming ───────────────────────────────────────────────────────────
+
+    def _tf_sources(w: World_, planet_id: str) -> list[tuple[Colony, float]]:
+        """The caller's colonies that can terraform this planet: one on it
+        from Advanced, or a Transcendent one within REMOTE_RANGE_LY."""
+        target = galaxy.star_pos(*split_planet_id(planet_id))
+        out = []
+        for col in w.colonies():
+            if col.status != 'active':
+                continue
+            if col.planet_id == planet_id:
+                if col.dev_level >= tf.MIN_DEV_LOCAL:
+                    out.append((col, 0.0))
+            elif col.dev_level >= tf.MIN_DEV_REMOTE and target:
+                pos = galaxy.star_pos(*_colony_star(col))
+                dist = math.hypot(pos[0] - target[0], pos[1] - target[1])
+                if dist <= tf.REMOTE_RANGE_LY:
+                    out.append((col, dist))
+        return sorted(out, key=lambda pair: pair[1])
+
+    def _project_json(w: World_, pr: TerraformProject) -> dict:
+        payer = w.s.get(Colony, pr.colony_id)
+        return {'id': pr.id, 'lever': pr.lever, 'target': pr.target, 'status': pr.status,
+                'mine': pr.owner_id == w.player.id,
+                'owner': w.s.get(Player, pr.owner_id).name,
+                'sourceName': payer.name if payer and pr.owner_id == w.player.id else None,
+                'startedTick': pr.started_tick}
+
+    def _tf_planet(w: World_, planet_id: str) -> dict:
+        try:
+            planet = w.planet(planet_id)
+        except ValueError:
+            planet = None
+        if planet is None:
+            raise HTTPException(404, 'planet not found')
+        return planet
+
+    @api.get('/api/terraform')
+    def api_terraform_get(planetId: str = '', w: World_ = W):
+        planet = _tf_planet(w, planetId)
+        deltas = planet.get('terraforming', {})
+        return {
+            'planetId': planetId,
+            'surfaceTempK': planet['surfaceTempK'],
+            'pressureAtm': planet['atmosphere']['pressure'],
+            'temperatureDeltaK': deltas.get('temperatureDeltaK', 0.0),
+            'pressureDeltaAtm': deltas.get('pressureDeltaAtm', 0.0),
+            'habitability': planet['habitability'],
+            'sizeCap': tf.size_cap(planet['habitability']['total']),
+            'levers': {name: {'unit': l['unit'], 'max': l['max'],
+                              'costUp': l['cost_up'], 'costDown': l['cost_down']}
+                       for name, l in tf.LEVERS.items()},
+            'sources': [{'planetId': c.planet_id, 'name': c.name,
+                         'devName': dev_name(colony_dict(c)), 'distance': round(d, 1),
+                         'perDay': {name: round(tf.lever_rate(name, c.dev_level) * tf.TICKS_PER_DAY, 3)
+                                    for name in tf.LEVERS}}
+                        for c, d in _tf_sources(w, planetId)],
+            'projects': [_project_json(w, pr) for pr in w.live_projects(planetId)],
+        }
+
+    @api.post('/api/terraform', status_code=201)
+    def api_terraform_post(body: dict = Body(default={}), w: World_ = W):
+        planet_id, lever = body.get('planetId', ''), body.get('lever')
+        planet = _tf_planet(w, planet_id)
+        if lever not in tf.LEVERS:
+            raise HTTPException(400, f'unknown lever: {lever!r}')
+        try:
+            target = float(body['target'])
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(400, 'target required (an offset, e.g. -20 for 20 K colder)')
+        if not math.isfinite(target) or abs(target) > tf.LEVERS[lever]['max']:
+            raise HTTPException(400, f'target must be within ±{tf.LEVERS[lever]["max"]} '
+                                     f'{tf.LEVERS[lever]["unit"]}')
+        sources = {c.planet_id: c for c, _ in _tf_sources(w, planet_id)}
+        src = sources.get(body.get('sourcePlanetId')) if body.get('sourcePlanetId') \
+            else next(iter(sources.values()), None)
+        if src is None:
+            raise HTTPException(403, 'no colony of yours can terraform this planet (one on it at '
+                                     f'dev {tf.MIN_DEV_LOCAL}+, or dev {tf.MIN_DEV_REMOTE} within '
+                                     f'{tf.REMOTE_RANGE_LY:g} Ly)')
+        if any(pr.owner_id == w.player.id and pr.lever == lever for pr in w.live_projects(planet_id)):
+            raise HTTPException(409, f'you already run a {lever} project here; stop it first')
+        tick = w.s.get(World, 1).last_tick
+        pr = TerraformProject(planet_id=planet_id, owner_id=w.player.id, colony_id=src.id,
+                              lever=lever, target=target, status='active', started_tick=tick)
+        w.s.add(pr)
+        w.s.flush()
+        unit = tf.LEVERS[lever]['unit']
+        for owner_id in set(w.s.scalars(select(Colony.owner_id).where(
+                Colony.planet_id == planet_id, Colony.owner_id != w.player.id))):
+            w.s.add(Notification(player_id=owner_id, tick=tick, message=(
+                f'{w.player.name} began terraforming {planet["name"]}: '
+                f'{lever} toward {target:+g} {unit}.')))
+        return _project_json(w, pr)
+
+    @api.delete('/api/terraform/{project_id}')
+    def api_terraform_delete(project_id: int, w: World_ = W):
+        pr = w.s.get(TerraformProject, project_id)
+        if pr is None or pr.owner_id != w.player.id:
+            raise HTTPException(404, 'project not found')
+        if pr.status in ('active', 'stalled'):
+            pr.status, pr.ended_tick = 'stopped', w.s.get(World, 1).last_tick
+        return {'ok': True}
+
+    # ── Notifications ──────────────────────────────────────────────────────────
+
+    @api.get('/api/notifications')
+    def api_notifications(w: World_ = W):
+        rows = w.s.scalars(select(Notification).where(Notification.player_id == w.player.id)
+                           .order_by(Notification.id.desc()).limit(50)).all()
+        return [{'id': n.id, 'message': n.message, 'timestamp': _iso(n.tick), 'read': n.read}
+                for n in rows]
+
+    @api.post('/api/notifications/read')
+    def api_notifications_read(w: World_ = W):
+        for n in w.s.scalars(select(Notification).where(Notification.player_id == w.player.id,
+                                                        Notification.read.is_(False))):
             n.read = True
         return {'ok': True}
 

@@ -2,3 +2,4 @@
 pytest
 time-machine
 httpx
+playwright

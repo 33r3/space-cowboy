@@ -123,6 +123,9 @@ export class InputHandler {
       if (e.key.toLowerCase() === 'l') {
         this.onColonyListToggle?.()
       }
+      if (e.key.toLowerCase() === 'n') {
+        this.onNotesToggle?.()
+      }
     }
 
     this._onKeyUp = (e) => {

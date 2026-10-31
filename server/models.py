@@ -3,7 +3,7 @@
 Times are integer ticks (whole minutes since 2000-01-01 UTC). Resource
 amounts are integers in thousandths (1.5 food = 1500); see units.py.
 """
-from sqlalchemy import JSON, Boolean, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Float, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -52,6 +52,7 @@ class Colony(Base):
     growth_progress:  Mapped[int]  = mapped_column(Integer, default=0)
     starvation_ticks: Mapped[int]  = mapped_column(Integer, default=0)
     is_homeworld:     Mapped[bool] = mapped_column(Boolean, default=False)
+    over_cap_ticks:   Mapped[int]  = mapped_column(Integer, default=0, server_default='0')
 
     stockpiles: Mapped[list['Stockpile']] = relationship(
         back_populates='colony', cascade='all, delete-orphan')
@@ -128,6 +129,21 @@ class Notification(Base):
     message:   Mapped[str]       = mapped_column(String(512))
     read:      Mapped[bool]      = mapped_column(Boolean, default=False)
     route_id:  Mapped[str | None] = mapped_column(ForeignKey('routes.id', ondelete='SET NULL'))
+
+
+class TerraformProject(Base):
+    """One player pushing one lever of one planet toward a target offset,
+    paid every tick by one of their colonies (generation/terraform.py)."""
+    __tablename__ = 'terraform_projects'
+    id:           Mapped[int]       = mapped_column(Integer, primary_key=True)
+    planet_id:    Mapped[str]       = mapped_column(String(64), index=True)
+    owner_id:     Mapped[int]       = mapped_column(ForeignKey('players.id'), index=True)
+    colony_id:    Mapped[int]       = mapped_column(ForeignKey('colonies.id'))   # who pays
+    lever:        Mapped[str]       = mapped_column(String(16))   # temperature | pressure
+    target:       Mapped[float]     = mapped_column(Float)        # offset to reach (K or atm)
+    status:       Mapped[str]       = mapped_column(String(16))   # active | stalled | done | stopped
+    started_tick: Mapped[int]       = mapped_column(Integer)
+    ended_tick:   Mapped[int | None] = mapped_column(Integer)
 
 
 class Explored(Base):

@@ -6,6 +6,8 @@ import { Renderer } from './renderer.js'
 import { ColonyManager } from './colony_manager.js'
 import { RouteManager } from './route_manager.js'
 import { ScoutManager } from './scout_manager.js'
+import { renderTerraform } from './terraform_panel.js'
+import { Notifications } from './notifications.js'
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
@@ -74,6 +76,11 @@ input.onColonyListToggle = () => {
   }
 }
 
+const notifications = new Notifications(
+  document.getElementById('notes-panel'), document.getElementById('notes-list'),
+  document.getElementById('notes-badge'))
+input.onNotesToggle = () => notifications.toggle()
+
 // ── Colony panel ──────────────────────────────────────────────────────────────
 
 const colonyPanel        = document.getElementById('colony-panel')
@@ -94,6 +101,8 @@ const cpNextSize         = document.getElementById('cp-next-size')
 const cpDevName          = document.getElementById('cp-dev-name')
 const cpUpgradeBtn       = document.getElementById('colony-panel-upgrade-btn')
 const cpUpgradeCost      = document.getElementById('cp-upgrade-cost')
+const cpHabLine          = document.getElementById('cp-hab-line')
+const cpTerraform        = document.getElementById('colony-panel-terraform')
 const cpFlowsBody        = document.getElementById('cp-flows-body')
 const cpStockpiles       = document.getElementById('cp-stockpiles')
 const cpTransitSection   = document.getElementById('colony-panel-transit-section')
@@ -160,6 +169,19 @@ function _renderColonySection(colony) {
   } else {
     cpGrowthLabel.textContent = 'max'
     cpNextSize.textContent    = ''
+  }
+
+  // What the planet allows: size cap and life support (harsh worlds)
+  if (colony.habitability !== undefined) {
+    const ls = Object.entries(colony.lifeSupportPerTick ?? {})
+      .map(([k, v]) => `${v} ${RES_LABELS[k] ?? k}`).join(' · ')
+    const over = size > (colony.sizeCap ?? 5)
+    cpHabLine.innerHTML = `Hab ${colony.habitability}/100 · max size ` +
+      `<span style="color:${over ? '#cc4444' : '#88aacc'}">${SIZE_NAMES[(colony.sizeCap ?? 5) - 1]}</span>` +
+      (over ? ' <span style="color:#cc4444">(shrinking)</span>' : '') +
+      (ls ? `<br>Life support: <span style="color:#cc8844">${ls}</span> per tick` : '')
+  } else {
+    cpHabLine.innerHTML = ''
   }
 
   // Development level
@@ -348,6 +370,7 @@ function openColonyPanel(planet, system) {
   }
 
   colonyPanel.style.display = 'block'
+  renderTerraform(cpTerraform, planet.id, () => colonyManager.refresh())
 }
 
 // Refresh panel if it's open and colony data was updated by polling

@@ -199,6 +199,27 @@ def _refine_atmosphere(atmo: dict, bio: dict) -> dict:
 
 # ── Hydrosphere ───────────────────────────────────────────────────────────────
 
+def water_phase(base_coverage: float, surface_temp_k: float) -> tuple[float, float, float, str]:
+    """How a planet's water sits at a temperature: (coverage, liquid
+    fraction, ice coverage, state). Used by generation and again by
+    terraforming when the temperature changes."""
+    if base_coverage < 0.001:
+        return base_coverage, 0.0, 0.0, WATER_NONE
+    if surface_temp_k > 450:
+        return base_coverage * 0.3, 0.0, 0.0, WATER_VAPOR
+    if surface_temp_k > 273:
+        warmth = min(1, (surface_temp_k - 273) / 100)
+        liquid_fraction = 0.7 + warmth * 0.3
+        ice_coverage    = (1 - liquid_fraction) * base_coverage
+        return (base_coverage, liquid_fraction, ice_coverage,
+                WATER_MIXED if ice_coverage > 0.05 else WATER_LIQUID)
+    freeze_depth    = max(0, 1 - (surface_temp_k - 150) / 123)
+    liquid_fraction = max(0, 0.1 - freeze_depth * 0.1)
+    ice_coverage    = base_coverage * 0.8
+    return (base_coverage, liquid_fraction, ice_coverage,
+            WATER_MIXED if liquid_fraction > 0.01 else WATER_ICE)
+
+
 def _generate_hydrosphere(prng: PRNG, planet_type: str, surface_temp_k: float, litho: dict, atmo: dict) -> dict:
     if planet_type in _GAS_TYPES:
         return {'waterCoverage': 0, 'liquidFraction': 0, 'iceCoverage': 0, 'state': WATER_NONE, 'subsurfaceOcean': False}
@@ -229,26 +250,7 @@ def _generate_hydrosphere(prng: PRNG, planet_type: str, surface_temp_k: float, l
         subsurface_chance *= 0.3
 
     base_coverage = min(1.0, base_coverage * (0.7 + 0.3 * min(1, litho['massEarth'])))
-
-    if base_coverage < 0.001:
-        state = WATER_NONE
-        liquid_fraction = 0.0
-        ice_coverage    = 0.0
-    elif surface_temp_k > 450:
-        state           = WATER_VAPOR
-        liquid_fraction = 0.0
-        ice_coverage    = 0.0
-        base_coverage  *= 0.3
-    elif surface_temp_k > 273:
-        warmth = min(1, (surface_temp_k - 273) / 100)
-        liquid_fraction = 0.7 + warmth * 0.3
-        ice_coverage    = (1 - liquid_fraction) * base_coverage
-        state = WATER_MIXED if ice_coverage > 0.05 else WATER_LIQUID
-    else:
-        freeze_depth    = max(0, 1 - (surface_temp_k - 150) / 123)
-        liquid_fraction = max(0, 0.1 - freeze_depth * 0.1)
-        ice_coverage    = base_coverage * 0.8
-        state = WATER_MIXED if liquid_fraction > 0.01 else WATER_ICE
+    base_coverage, liquid_fraction, ice_coverage, state = water_phase(base_coverage, surface_temp_k)
 
     subsurface_ocean = (
         base_coverage > 0.1
