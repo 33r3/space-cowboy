@@ -1,5 +1,8 @@
 /**
- * GalaxyClient — async fetch layer for Flask API.
+ * GalaxyClient — async fetch layer for the game API.
+ * Every star is visible. A system's planets come back only once the player
+ * knows it (server/vision.py); unknown systems are refetched now and then,
+ * and forgetUnsurveyed() drops them at once (after a probe lands).
  * Maintains local caches so every frame doesn't fire a network request.
  * Replaces GalaxyManager + ChunkRegistry from the TypeScript version.
  */
@@ -9,36 +12,16 @@ export class GalaxyClient {
   #inflight           = new Set()   // chunk keys currently being fetched
   #sysInflight        = new Set()   // star ids currently being fetched
   #config             = null
-  #visibilityCircles  = []          // set each frame by main.js
+  #unsurveyedAt       = new Map()   // starId → when an unsurveyed answer was cached
 
   async init() {
     this.#config = await fetch('/api/config').then(r => r.json())
   }
 
-  // ── Visibility filtering ────────────────────────────────────────────────────
-
-  setVisibilityCircles(circles) {
-    this.#visibilityCircles = circles
-  }
-
-  #isStarVisible(star) {
-    if (!this.#visibilityCircles.length) return false
-    for (const c of this.#visibilityCircles) {
-      const dx = star.worldX - c.worldX
-      const dy = star.worldY - c.worldY
-      if (dx * dx + dy * dy <= c.starRadiusLy * c.starRadiusLy) return true
-    }
-    return false
-  }
-
-  #isPlanetVisible(star) {
-    if (!this.#visibilityCircles.length) return false
-    for (const c of this.#visibilityCircles) {
-      const dx = star.worldX - c.worldX
-      const dy = star.worldY - c.worldY
-      if (dx * dx + dy * dy <= c.planetRadiusLy * c.planetRadiusLy) return true
-    }
-    return false
+  /** Forget every unsurveyed system so the next frame asks again. */
+  forgetUnsurveyed() {
+    for (const starId of this.#unsurveyedAt.keys()) this.#systemCache.delete(starId)
+    this.#unsurveyedAt.clear()
   }
 
   // ── Synchronous accessors (return what's cached, kick off fetches) ──────────
@@ -60,8 +43,7 @@ export class GalaxyClient {
       if (cached) {
         for (const star of cached) {
           if (star.worldX >= bounds.minX && star.worldX <= bounds.maxX &&
-              star.worldY >= bounds.minY && star.worldY <= bounds.maxY &&
-              this.#isStarVisible(star)) {
+              star.worldY >= bounds.minY && star.worldY <= bounds.maxY) {
             stars.push(star)
           }
         }
@@ -82,7 +64,6 @@ export class GalaxyClient {
    * Kicks off async fetches for missing systems.
    */
   getSystemsInViewport(bounds) {
-    // Use raw star list (unfiltered by star visibility) then apply planet visibility
     if (!this.#config) return []
 
     const coords = this.#chunksInBounds(bounds)
@@ -102,9 +83,14 @@ export class GalaxyClient {
     }
 
     const systems = []
+    const now = Date.now()
     for (const star of allStars) {
-      if (!this.#isPlanetVisible(star)) continue
-      const cached = this.#systemCache.get(star.id)
+      let cached = this.#systemCache.get(star.id)
+      if (cached && !cached.surveyed && now - (this.#unsurveyedAt.get(star.id) ?? 0) > 30_000) {
+        this.#systemCache.delete(star.id)       // ask again: you may know it by now
+        this.#unsurveyedAt.delete(star.id)
+        cached = null
+      }
       if (cached) {
         systems.push(cached)
       } else if (!this.#sysInflight.has(star.id)) {
@@ -158,6 +144,7 @@ export class GalaxyClient {
     try {
       const data = await fetch(`/api/system?cx=${cx}&cy=${cy}&index=${index}`).then(r => r.json())
       this.#systemCache.set(data.starId, data)
+      if (!data.surveyed) this.#unsurveyedAt.set(data.starId, Date.now())
     } catch { /* ignore */ } finally {
       this.#sysInflight.delete(starId)
     }

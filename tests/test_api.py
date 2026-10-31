@@ -1,8 +1,8 @@
-"""The HTTP API as it behaves today (Flask, JSON save files). These pin
-behaviour before the move to FastAPI + a database."""
+"""The HTTP API. Written against the old Flask app to pin its behaviour,
+then kept for the server that replaced it."""
 import pytest
 
-from conftest import HOMEWORLD, NEAR, NEAR_ID, colonies
+from conftest import HOMEWORLD, NEAR, NEAR_ID, NEAR_STAR, colonies
 
 
 def test_homeworld_is_founded_once(client):
@@ -25,6 +25,7 @@ def test_colonies_catch_up_on_elapsed_ticks(client, clock):
 
 
 def test_colonization_preview_lists_the_homeworld_as_source(client):
+    client.survey(NEAR_STAR)
     q = '&'.join(f'{k}={v}' for k, v in NEAR.items())
     prev = client.get(f'/api/colonization-preview?{q}').get_json()
     assert prev['eligible']
@@ -33,6 +34,7 @@ def test_colonization_preview_lists_the_homeworld_as_source(client):
 
 
 def colonize(client, **extra):
+    client.survey(NEAR_STAR)
     return client.post('/api/colonies', json={**NEAR, **extra})
 
 
@@ -125,9 +127,8 @@ def test_route_edit_and_delete(client, clock):
     assert client.delete(f'/api/routes/{rid}').status_code == 404
 
 
-def test_routes_cannot_create_resources(client, clock, flask_bug):
-    flask_bug('a route loads what the colony has but delivers the full declared '
-              'cargo, creating resources')
+def test_routes_cannot_create_resources(client, clock):
+    """(The Flask app made ~10 food per trip from nothing.)"""
     arrived_colony(client, clock)
     # the new colony starts with 10 food; ask it to ship 20 back every trip
     client.post('/api/routes', json=route_body({}, {'food': 20}))
@@ -158,9 +159,8 @@ def test_scouts_launch_spend_and_arrive(client, clock):
     assert s['status'] == 'arrived'
 
 
-def test_arrival_ticks_count_from_arrival(client, clock, flask_bug):
-    flask_bug('a colony that arrived while nobody was looking starts ticking from '
-              'the next read, not from its arrival')
+def test_arrival_ticks_count_from_arrival(client, clock):
+    """(The Flask app started a colony ticking at the next read.)"""
     colonize(client)
     clock.advance(minutes=4 + 20)                     # arrived 20 ticks ago
     from generation.colony_economics import STARTER_STOCKPILES

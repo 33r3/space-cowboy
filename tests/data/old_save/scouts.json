@@ -1,0 +1,13 @@
+[
+ {
+  "scoutId": "f93f5cf8-7ee1-4371-a2a5-4293a4cbd09a",
+  "sourcePlanetId": "0,0:8:2",
+  "destStarId": "0,-1:1",
+  "destWorldX": 34.06382934190333,
+  "destWorldY": -20.811850856989622,
+  "status": "in_transit",
+  "launchedAtTick": 14114220,
+  "transitTicks": 4,
+  "arrivalTick": 14114224
+ }
+]

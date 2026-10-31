@@ -16,7 +16,7 @@ from generation import terraform as tf
 from generation.colony_economics import apply_ticks
 from generation.trade_routes import leg_transit_ticks
 
-from .galaxy import Galaxy
+from .galaxy import Galaxy, split_star_id
 from .models import (Colony, Event, Notification, Planet, Route, Ship, Stockpile,
                      TerraformProject, World)
 from .units import fixed_map, float_map, to_fixed
@@ -58,6 +58,12 @@ def _ship_arrives(session: Session, galaxy: Galaxy, ship: Ship, tick: int) -> No
             col.status = 'active'
     elif ship.kind == 'scout':
         ship.status = 'arrived'
+        from .vision import survey_around
+        new = survey_around(session, galaxy, ship.owner_id, ship.to_star_id, tick)
+        star = galaxy.star(*split_star_id(ship.to_star_id))
+        _notify(session, ship.owner_id, tick,
+                f'Probe arrived at {star["name"] if star else ship.to_star_id}: '
+                f'{len(new)} system{"s" if len(new) != 1 else ""} surveyed.')
     elif ship.kind == 'freighter':
         _freighter_arrives(session, galaxy, ship, tick)
 

@@ -1,0 +1,26 @@
+{
+ "routes": [
+  {
+   "routeId": "423c191a",
+   "name": "Run",
+   "shipClass": "freighter_mk1",
+   "legs": [
+    {
+     "cargo": {
+      "food": 5
+     },
+     "fromPlanetId": "0,0:8:2",
+     "toPlanetId": "0,-1:1:2"
+    },
+    {
+     "cargo": {},
+     "fromPlanetId": "0,-1:1:2",
+     "toPlanetId": "0,0:8:2"
+    }
+   ],
+   "status": "active",
+   "currentLegIndex": 0,
+   "legDepartedAt": "2026-11-01T13:00:00+00:00"
+  }
+ ]
+}

@@ -389,9 +389,10 @@ function openColonyPanel(planet, system) {
 
 // Refresh panel if it's open and colony data was updated by polling
 colonyManager.onUpdate = () => {
-  // Refresh scout data and update visibility circles
+  // Refresh scouts; a landed probe may have surveyed systems
   scoutManager.refresh().then(() => {
     colonyManager.setArrivedScouts(scoutManager.arrivedScouts)
+    galaxyClient.forgetUnsurveyed()
     if (scoutPanel.style.display !== 'none' && _scoutPanelStar) {
       _refreshScoutPanelProbes(_scoutPanelStar.id)
     }
@@ -506,7 +507,9 @@ function _refreshScoutPanelProbes(starId) {
   if (!probes.length) { spProbes.innerHTML = ''; return }
   spProbes.innerHTML = '<div class="cp-section-label" style="margin-top:8px">Active Probes</div>' +
     probes.map(p => {
-      const label = p.status === 'arrived' ? '✓ Arrived' : `▶ ${p.transitTicks - Math.max(0, p.arrivalTick - (Date.now() / 60000 | 0))} ticks remaining`
+      const nowTick = Math.floor((Date.now() - Date.UTC(2000, 0, 1)) / 60000)   // server ticks
+      const label = p.status === 'arrived' ? '✓ Arrived: system surveyed'
+        : `▶ ${Math.max(0, p.arrivalTick - nowTick)} min to arrival`
       return `<div class="scout-probe-entry">${label}</div>`
     }).join('')
 }
@@ -530,6 +533,10 @@ async function openScoutPanel(star) {
   spStatus.innerHTML = '<span style="color:#445566;font-size:10px">Checking range...</span>'
   try {
     const preview = await fetch(`/api/scout-preview?starId=${encodeURIComponent(star.id)}`).then(r => r.json())
+    spSubtitle.innerHTML += preview.surveyed
+      ? '<br><span style="color:#66cc88">✓ Surveyed: zoom in to see its planets</span>'
+      : '<br><span style="color:#cc8844">Unsurveyed: planets unknown. A probe surveys this ' +
+        'system and its neighbours.</span>'
     if (!preview.eligible) {
       spStatus.innerHTML = `<div style="font-size:10px;color:#cc4444">${preview.reason ?? 'No eligible source'}</div>`
       spSendBtn.style.display = 'none'
@@ -1070,8 +1077,6 @@ function gameLoop(timestamp) {
   input.update()
 
   const viewBounds = camera.getViewportBounds(viewport.width, viewport.height)
-
-  galaxyClient.setVisibilityCircles(colonyManager.visibilityCircles)
 
   const stars = galaxyClient.getStarsInViewport(viewBounds)
   renderer.render(viewport.width, viewport.height, stars.length)

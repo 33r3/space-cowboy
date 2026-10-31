@@ -4,6 +4,7 @@ from conftest import HOMEWORLD, NEAR, NEAR_ID, colonies
 
 def setup_p1(c, clock):
     """Player 1: homeworld (fixture), a landed colony, a route, a scout."""
+    c.survey('0,-1:1')
     c.post('/api/colonies', json=NEAR)
     clock.advance(minutes=60)
     rid = c.post('/api/routes', json={'name': 'P1 run', 'shipClass': 'freighter_mk1', 'legs': [
@@ -26,8 +27,9 @@ def test_a_second_player_sees_and_touches_nothing_of_the_first(fastapi_client, c
     assert c.post(f'/api/colonies/{HOMEWORLD}/upgrade').status_code == 404
     assert c.get(f'/api/ships?planetId={HOMEWORLD}').status_code == 404
     q = '&'.join(f'{k}={v}' for k, v in NEAR.items())
-    assert c.get(f'/api/colonization-preview?{q}').get_json()['eligible'] is False
+    assert c.get(f'/api/colonization-preview?{q}').status_code == 404      # p2 never surveyed it
     far = {'cx': 1, 'cy': 1, 'starIndex': 28, 'planetIndex': 2}
+    c.survey('1,1:28')                                    # knowing it isn't enough
     assert c.post('/api/colonies', json={**far, 'sourcePlanetId': HOMEWORLD}).status_code == 404
     assert c.post('/api/colonies', json=far).status_code == 403
     assert c.post('/api/routes', json={'shipClass': 'freighter_mk1', 'legs': [

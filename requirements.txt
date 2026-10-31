@@ -1,4 +1,3 @@
-flask
 sqlalchemy
 alembic
 fastapi

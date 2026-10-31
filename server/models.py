@@ -146,7 +146,10 @@ class TerraformProject(Base):
     ended_tick:   Mapped[int | None] = mapped_column(Integer)
 
 
-class Explored(Base):
-    __tablename__ = 'explored'
-    player_id: Mapped[int] = mapped_column(ForeignKey('players.id'), primary_key=True)
-    chunk_key: Mapped[str] = mapped_column(String(32), primary_key=True)
+class Survey(Base):
+    """A star system whose planets a player knows in detail, because a
+    probe surveyed it (vision.py; colonies' sensors aren't stored)."""
+    __tablename__ = 'surveys'
+    player_id:     Mapped[int] = mapped_column(ForeignKey('players.id'), primary_key=True)
+    star_id:       Mapped[str] = mapped_column(String(32), primary_key=True)
+    surveyed_tick: Mapped[int] = mapped_column(Integer)

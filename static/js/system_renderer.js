@@ -45,6 +45,21 @@ export class SystemRenderer {
       system.starWorldX, system.starWorldY, canvasW, canvasH,
     )
 
+    // ── Unsurveyed: the star only ────────────────────────────────────────────
+    if (system.surveyed === false) {
+      if (camera.zoom > 8) {
+        ctx.save()
+        ctx.font = '11px Courier New, monospace'
+        ctx.textAlign = 'center'
+        ctx.fillStyle = 'rgba(200, 140, 70, 0.8)'
+        ctx.fillText('unsurveyed: planets unknown', starSx, starSy + 34)
+        ctx.fillStyle = 'rgba(120, 140, 160, 0.7)'
+        ctx.fillText('zoom out and click the star to send a probe', starSx, starSy + 50)
+        ctx.restore()
+      }
+      return
+    }
+
     // ── HZ ring ─────────────────────────────────────────────────────────────
     const vs = system.visualScale ?? VISUAL_AU_TO_LY
     const hzInnerPx = system.hzInnerAU * vs * camera.zoom

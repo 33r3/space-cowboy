@@ -3,7 +3,8 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-import app as app_module
+from generation.config import DEFAULT_CONFIG
+from generation.density_field import DensityField
 from generation.colony_economics import ALL_RESOURCES, STARTER_STOCKPILES, apply_ticks
 from server.galaxy import Galaxy
 from server.models import (Base, Colony, Event, Notification, Player, Route, RouteLeg, Ship,
@@ -12,7 +13,7 @@ from server.ticker import advance, colony_dict, planet_of
 from server.units import fixed_map, to_float
 
 T0 = 1000
-GALAXY = Galaxy(app_module.config, app_module.density_field)
+GALAXY = Galaxy(DEFAULT_CONFIG, DensityField(DEFAULT_CONFIG))
 HOME = ('0,0:8:2', 0, 0, 8)
 NEAR = ('0,-1:1:2', 0, -1, 1)         # 181 Ly away
 

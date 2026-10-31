@@ -1,0 +1,498 @@
+{
+ "now_minutes_after_start": 61,
+ "colonies": {
+  "0,0:8:2": {
+   "canUpgradeDev": false,
+   "colonyYields": {
+    "chemFeedstocks": 0.08,
+    "food": 0.75,
+    "fusionFuel": 0.08,
+    "metals": 0.15,
+    "minerals": 0.3,
+    "organicFuels": 0.15,
+    "radioactives": 0.03,
+    "water": 0.75
+   },
+   "consumptionPerTick": {
+    "chemFeedstocks": 0.0,
+    "food": 4.0,
+    "fusionFuel": 0.0,
+    "metals": 2.0,
+    "minerals": 4.0,
+    "organicFuels": 2.0,
+    "radioactives": 0.0,
+    "water": 4.0
+   },
+   "cx": 0,
+   "cy": 0,
+   "departedAt": null,
+   "devName": "Advanced",
+   "developmentLevel": 3,
+   "extractionPerTick": {
+    "chemFeedstocks": 1.6,
+    "food": 15.0,
+    "fusionFuel": 1.6,
+    "metals": 3.0,
+    "minerals": 6.0,
+    "organicFuels": 3.0,
+    "radioactives": 0.6,
+    "water": 15.0
+   },
+   "founded": "2026-11-01",
+   "growthProgress": 41,
+   "isAbandoned": false,
+   "isHomeworld": true,
+   "lastTickedAt": "2026-11-01T13:01:00+00:00",
+   "name": "Zeum III",
+   "netFlowPerTick": {
+    "chemFeedstocks": 1.6,
+    "food": 11.0,
+    "fusionFuel": 1.6,
+    "metals": 1.0,
+    "minerals": 2.0,
+    "organicFuels": 1.0,
+    "radioactives": 0.6,
+    "water": 11.0
+   },
+   "overCapTicks": 0,
+   "planet": {
+    "atmosphere": {
+     "breathable": true,
+     "composition": "N2O2",
+     "greenhouseEffect": 40.08421663205965,
+     "pressure": 0.9921224156306226,
+     "toxicity": 0
+    },
+    "biosphere": {
+     "coverage": 0.09521194486878813,
+     "oxygenContribution": 0.0,
+     "stage": "Prebiotic"
+    },
+    "colonyYields": {
+     "chemFeedstocks": 0.0,
+     "food": 0.0,
+     "fusionFuel": 0.0,
+     "metals": 0.09,
+     "minerals": 0.04,
+     "organicFuels": 0.04,
+     "radioactives": 0.03,
+     "water": 0.27
+    },
+    "eccentricity": 0.06879341017920523,
+    "habitability": {
+     "atmosphere": 0.9976367246891868,
+     "biosphere": 0.1,
+     "category": "Optimal",
+     "gravity": 0.9995273680641618,
+     "radiation": 0.8034031667602107,
+     "temperature": 0.9449756573059188,
+     "total": 91,
+     "water": 1
+    },
+    "hydrosphere": {
+     "iceCoverage": 0.0994158958140656,
+     "liquidFraction": 0.7044873144276196,
+     "state": "Mixed",
+     "subsurfaceOcean": false,
+     "waterCoverage": 0.3364183693891391
+    },
+    "id": "0,0:8:2",
+    "inHabitableZone": true,
+    "index": 2,
+    "lithosphere": {
+     "composition": "IronRich",
+     "densityGcm3": 5.680225092289038,
+     "gravityG": 0.987700488965603,
+     "magneticField": 0.6146839178897988,
+     "massEarth": 1.2630142052657902,
+     "radiusEarth": 1.1308147982461378,
+     "tectonicActivity": 0.6464756901143118
+    },
+    "name": "Zeum III",
+    "orbitalAngleRad": 2.726559880368886,
+    "orbitalPeriodYears": 1.1877794175603489,
+    "planetType": "Terran",
+    "resources": {
+     "exotics": {
+      "abundance": 0,
+      "accessibility": 0
+     },
+     "metals": {
+      "abundance": 0.1539202950755134,
+      "accessibility": 0.5806763164699078
+     },
+     "organics": {
+      "abundance": 0.035819841129705314,
+      "accessibility": 0.7313452908070757
+     },
+     "radioactives": {
+      "abundance": 0.04435532556287944,
+      "accessibility": 0.7774535414529964
+     },
+     "rareEarths": {
+      "abundance": 0.019232281940989193,
+      "accessibility": 0.6134222540305927
+     },
+     "rareMetals": {
+      "abundance": 0.125643201995641,
+      "accessibility": 0.35360171063803136
+     },
+     "volatiles": {
+      "abundance": 0.07126513519324362,
+      "accessibility": 0.7398063046159222
+     }
+    },
+    "semiMajorAxisAU": 1.0625916057212994,
+    "starId": "0,0:8",
+    "surfaceTempK": 274.4957714758732,
+    "terraforming": {
+     "activeProjects": [],
+     "pressureDeltaAtm": 0,
+     "temperatureDeltaK": 0,
+     "waterCoverageDelta": 0
+    },
+    "worldX": 161.32266101317921,
+    "worldY": 107.99274638438933
+   },
+   "planetId": "0,0:8:2",
+   "size": 5,
+   "sizeName": "Megacity",
+   "sourcePlanetId": null,
+   "starIndex": 8,
+   "starvationTicks": 0,
+   "status": "active",
+   "stockpiles": {
+    "chemFeedstocks": 127.6,
+    "food": 571.4,
+    "fusionFuel": 117.6,
+    "metals": 44.2,
+    "minerals": 237.0,
+    "organicFuels": 138.5,
+    "radioactives": 35.1,
+    "water": 599.3
+   },
+   "transitTicks": null,
+   "upgradeCost": {
+    "chemFeedstocks": 100,
+    "fusionFuel": 50,
+    "metals": 200
+   }
+  },
+  "0,-1:1:2": {
+   "canUpgradeDev": false,
+   "colonyYields": {
+    "chemFeedstocks": 0.0,
+    "food": 0.05,
+    "fusionFuel": 0.0,
+    "metals": 0.17,
+    "minerals": 0.1,
+    "organicFuels": 0.2,
+    "radioactives": 0.06,
+    "water": 0.65
+   },
+   "consumptionPerTick": {
+    "chemFeedstocks": 0.0,
+    "food": 0.25,
+    "fusionFuel": 0.0,
+    "metals": 0.0,
+    "minerals": 0.0,
+    "organicFuels": 0.0,
+    "radioactives": 0.0,
+    "water": 0.25
+   },
+   "cx": 0,
+   "cy": -1,
+   "departedAt": null,
+   "devName": "Primitive",
+   "developmentLevel": 1,
+   "extractionPerTick": {
+    "chemFeedstocks": 0.0,
+    "food": 0.025,
+    "fusionFuel": 0.0,
+    "metals": 0.085,
+    "minerals": 0.05,
+    "organicFuels": 0.1,
+    "radioactives": 0.03,
+    "water": 0.325
+   },
+   "founded": "2026-11-01",
+   "growthProgress": 1,
+   "isAbandoned": false,
+   "isHomeworld": false,
+   "lastTickedAt": "2026-11-01T13:01:00+00:00",
+   "name": "Kainai III",
+   "netFlowPerTick": {
+    "chemFeedstocks": 0.0,
+    "food": -0.225,
+    "fusionFuel": 0.0,
+    "metals": 0.085,
+    "minerals": 0.05,
+    "organicFuels": 0.1,
+    "radioactives": 0.03,
+    "water": 0.075
+   },
+   "overCapTicks": 0,
+   "planet": {
+    "atmosphere": {
+     "breathable": true,
+     "composition": "N2O2",
+     "greenhouseEffect": 28.201125341392814,
+     "pressure": 1.078319143072396,
+     "toxicity": 0
+    },
+    "biosphere": {
+     "coverage": 0.4855810492299497,
+     "oxygenContribution": 0.0,
+     "stage": "Microbial"
+    },
+    "colonyYields": {
+     "chemFeedstocks": 0.0,
+     "food": 0.05,
+     "fusionFuel": 0.0,
+     "metals": 0.17,
+     "minerals": 0.1,
+     "organicFuels": 0.2,
+     "radioactives": 0.06,
+     "water": 0.65
+    },
+    "eccentricity": 0.05947160725481808,
+    "habitability": {
+     "atmosphere": 0.9765042570782813,
+     "biosphere": 0.2,
+     "category": "Optimal",
+     "gravity": 0.9821370758004818,
+     "radiation": 0.4606492267782645,
+     "temperature": 0.9980872879680998,
+     "total": 87,
+     "water": 1
+    },
+    "hydrosphere": {
+     "iceCoverage": 0.17843038977040226,
+     "liquidFraction": 0.7702101370754013,
+     "state": "Mixed",
+     "subsurfaceOcean": false,
+     "waterCoverage": 0.7764937386683194
+    },
+    "id": "0,-1:1:2",
+    "inHabitableZone": true,
+    "index": 2,
+    "lithosphere": {
+     "composition": "Silicate",
+     "densityGcm3": 4.322142050531693,
+     "gravityG": 0.9240539307609515,
+     "magneticField": 0.15162306694566116,
+     "massEarth": 0.8721865942236036,
+     "radiusEarth": 0.9715296161361039,
+     "tectonicActivity": 0.3256500193849206
+    },
+    "name": "Kainai III",
+    "orbitalAngleRad": 1.1337098733496866,
+    "orbitalPeriodYears": 0.19677306166160308,
+    "planetType": "Oceanic",
+    "resources": {
+     "exotics": {
+      "abundance": 0,
+      "accessibility": 0
+     },
+     "metals": {
+      "abundance": 0.30198217045981435,
+      "accessibility": 0.5738656415836885
+     },
+     "organics": {
+      "abundance": 0.07766479095444084,
+      "accessibility": 0.7640881043393164
+     },
+     "radioactives": {
+      "abundance": 0.19290615865960717,
+      "accessibility": 0.30349322794936595
+     },
+     "rareEarths": {
+      "abundance": 0.13746185206552036,
+      "accessibility": 0.3657870411174372
+     },
+     "rareMetals": {
+      "abundance": 0.18894547752104696,
+      "accessibility": 0.3630021876655519
+     },
+     "volatiles": {
+      "abundance": 0.24719606838189068,
+      "accessibility": 0.4920171718578786
+     }
+    },
+    "semiMajorAxisAU": 0.21363299104994593,
+    "starId": "0,-1:1",
+    "surfaceTempK": 296.4033790251338,
+    "terraforming": {
+     "activeProjects": [],
+     "pressureDeltaAtm": 0,
+     "temperatureDeltaK": 0,
+     "waterCoverageDelta": 0
+    },
+    "worldX": 34.11808805724414,
+    "worldY": -20.69572139664064
+   },
+   "planetId": "0,-1:1:2",
+   "size": 1,
+   "sizeName": "Outpost",
+   "sourcePlanetId": null,
+   "starIndex": 1,
+   "starvationTicks": 0,
+   "status": "active",
+   "stockpiles": {
+    "chemFeedstocks": 0.0,
+    "food": 9.775,
+    "fusionFuel": 0.0,
+    "metals": 5.085,
+    "minerals": 5.05,
+    "organicFuels": 0.1,
+    "radioactives": 0.03,
+    "water": 10.075
+   },
+   "transitTicks": null,
+   "upgradeCost": {
+    "metals": 20,
+    "minerals": 50
+   }
+  },
+  "1,1:28:2": {
+   "colonyYields": {
+    "chemFeedstocks": 0.0,
+    "food": 0.24,
+    "fusionFuel": 0.0,
+    "metals": 0.15,
+    "minerals": 0.06,
+    "organicFuels": 0.21,
+    "radioactives": 0.06,
+    "water": 0.68
+   },
+   "cx": 1,
+   "cy": 1,
+   "departedAt": "2026-11-01T13:00:00+00:00",
+   "developmentLevel": 1,
+   "founded": "2026-11-01",
+   "growthProgress": 0,
+   "isAbandoned": false,
+   "isHomeworld": false,
+   "lastTickedAt": "2026-11-01T13:00:00+00:00",
+   "name": "Ososer III",
+   "planet": {
+    "atmosphere": {
+     "breathable": true,
+     "composition": "N2O2",
+     "greenhouseEffect": 14.00652919290406,
+     "pressure": 1.085953868365267,
+     "toxicity": 0
+    },
+    "biosphere": {
+     "coverage": 0.4894676611758768,
+     "oxygenContribution": 0.061172339136305556,
+     "stage": "SimpleMulticellular"
+    },
+    "colonyYields": {
+     "chemFeedstocks": 0.0,
+     "food": 0.24,
+     "fusionFuel": 0.0,
+     "metals": 0.15,
+     "minerals": 0.06,
+     "organicFuels": 0.21,
+     "radioactives": 0.06,
+     "water": 0.68
+    },
+    "eccentricity": 0.098676619771868,
+    "habitability": {
+     "atmosphere": 0.97421383949042,
+     "biosphere": 0.5,
+     "category": "Optimal",
+     "gravity": 0.7356139409382515,
+     "radiation": 0.6776333999432083,
+     "temperature": 0.9978702210107046,
+     "total": 88,
+     "water": 1
+    },
+    "hydrosphere": {
+     "iceCoverage": 0.18617139143856132,
+     "liquidFraction": 0.7707745131239757,
+     "state": "Mixed",
+     "subsurfaceOcean": false,
+     "waterCoverage": 0.8121757923858239
+    },
+    "id": "1,1:28:2",
+    "inHabitableZone": true,
+    "index": 2,
+    "lithosphere": {
+     "composition": "Silicate",
+     "densityGcm3": 4.295536869112402,
+     "gravityG": 1.313458046769632,
+     "magneticField": 0.35526679988641663,
+     "massEarth": 1.8356583935441448,
+     "radiusEarth": 1.1821914919186383,
+     "tectonicActivity": 0.23419081801548602
+    },
+    "name": "Ososer III",
+    "orbitalAngleRad": 3.026041786946673,
+    "orbitalPeriodYears": 0.6076941990519317,
+    "planetType": "Oceanic",
+    "resources": {
+     "exotics": {
+      "abundance": 0,
+      "accessibility": 0
+     },
+     "metals": {
+      "abundance": 0.22011955468915403,
+      "accessibility": 0.694981155754067
+     },
+     "organics": {
+      "abundance": 0.1862816953119051,
+      "accessibility": 0.3733663567341864
+     },
+     "radioactives": {
+      "abundance": 0.13855350252240897,
+      "accessibility": 0.4556889148894697
+     },
+     "rareEarths": {
+      "abundance": 0.033159748897422105,
+      "accessibility": 0.5753494517644867
+     },
+     "rareMetals": {
+      "abundance": 0.10969163118861615,
+      "accessibility": 0.4517079888144508
+     },
+     "volatiles": {
+      "abundance": 0.12292287778109312,
+      "accessibility": 0.5123590679373592
+     }
+    },
+    "semiMajorAxisAU": 0.6306963654906288,
+    "starId": "1,1:28",
+    "surfaceTempK": 296.5915043746586,
+    "terraforming": {
+     "activeProjects": [],
+     "pressureDeltaAtm": 0,
+     "temperatureDeltaK": 0,
+     "waterCoverageDelta": 0
+    },
+    "worldX": 288.1795375670883,
+    "worldY": 277.39657547090445
+   },
+   "planetId": "1,1:28:2",
+   "size": 1,
+   "sourcePlanetId": "0,0:8:2",
+   "starIndex": 28,
+   "starvationTicks": 0,
+   "status": "in_transit",
+   "stockpiles": {
+    "chemFeedstocks": 0.0,
+    "food": 10.0,
+    "fusionFuel": 0.0,
+    "metals": 5.0,
+    "minerals": 5.0,
+    "organicFuels": 0.0,
+    "radioactives": 0.0,
+    "water": 10.0
+   },
+   "ticksRemaining": 3.0,
+   "transitProgressPct": 25.0,
+   "transitTicks": 4
+  }
+ }
+}

@@ -44,6 +44,7 @@ from .importer import homeworld_overrides
 from .models import (Colony, Event, Notification, Planet, Player, Route, RouteLeg, Ship,
                      Stockpile, TerraformProject, World)
 from .ticker import advance, colony_dict, stockpiles
+from .vision import Vision
 from .units import fixed_map, float_map, now_tick, time_of, to_fixed
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -139,6 +140,7 @@ class World_:
     """Per-request view: session + game + the calling player."""
     def __init__(self, s: Session, game: Game, player: Player):
         self.s, self.game, self.galaxy, self.player = s, game, game.galaxy, player
+        self.vision = Vision(s, game.galaxy, player.id)
 
     def planet(self, planet_id: str) -> dict | None:
         """The planet as it is now, with its live terraforming projects."""
@@ -295,7 +297,9 @@ def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for ever
         if star is None:
             raise HTTPException(404, 'star not found')
         system = generate_system(star)
-        system['planets'] = [w.planet(p['id']) for p in system['planets']]
+        system['surveyed'] = w.vision.knows(star['id'])
+        system['planets'] = [w.planet(p['id']) for p in system['planets']] \
+            if system['surveyed'] else []            # unknown worlds: the star only
         return system
 
     @api.get('/api/homeworld')
@@ -328,8 +332,8 @@ def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for ever
         if star is None:
             raise HTTPException(404, 'star not found')
         planets = generate_system(star)['planets']
-        if not 0 <= planet_index < len(planets):
-            raise HTTPException(404, 'planet not found')
+        if not 0 <= planet_index < len(planets) or not w.vision.knows(star['id']):
+            raise HTTPException(404, 'planet not found (survey this system first)')
         return star, w.planet(planets[planet_index]['id']), cx, cy, star_index
 
     @api.get('/api/colonization-preview')
@@ -568,11 +572,11 @@ def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for ever
 
     def _tf_planet(w: World_, planet_id: str) -> dict:
         try:
-            planet = w.planet(planet_id)
+            planet = w.planet(planet_id) if w.vision.knows_planet(planet_id) else None
         except ValueError:
             planet = None
         if planet is None:
-            raise HTTPException(404, 'planet not found')
+            raise HTTPException(404, 'planet not found (survey this system first)')
         return planet
 
     @api.get('/api/terraform')
@@ -674,9 +678,11 @@ def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for ever
     def api_scout_preview(starId: str = '', w: World_ = W):
         *_, pos = _dest(starId)
         sources = w.sources_in_range(pos, scout_range)
+        surveyed = w.vision.knows(starId)
         if not sources:
-            return {'eligible': False, 'reason': 'no Advanced (dev 3+) colony within scout range'}
-        return {'eligible': True, 'cost': SCOUT_COST, 'sources': [{
+            return {'eligible': False, 'surveyed': surveyed,
+                    'reason': 'no Advanced (dev 3+) colony within scout range'}
+        return {'eligible': True, 'surveyed': surveyed, 'cost': SCOUT_COST, 'sources': [{
             'planetId': col.planet_id, 'name': col.name, 'devName': dev_name(colony_dict(col)),
             'distance': round(dist, 1), 'scoutRange': scout_range(col.dev_level),
             'transitTicks': max(1, math.ceil(dist / COLONY_SHIP_SPEED_LY_PER_TICK)),

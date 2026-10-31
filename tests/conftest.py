@@ -8,12 +8,12 @@ import time_machine
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-import app as app_module  # noqa: E402
 
 START = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
 HOMEWORLD = '0,0:8:2'          # Zeum III, the seed-42 homeworld
 NEAR = {'cx': 0, 'cy': -1, 'starIndex': 1, 'planetIndex': 2}   # Kainai III, 181 Ly
 NEAR_ID = '0,-1:1:2'
+NEAR_STAR = '0,-1:1'             # beyond the homeworld's sensors: needs a survey
 
 
 class Clock:
@@ -31,19 +31,9 @@ def clock():
         yield Clock(t)
 
 
-@pytest.fixture
-def flask_client(tmp_path, monkeypatch, clock):
-    """The old Flask app with its save files in a temp dir and the clock frozen."""
-    monkeypatch.setattr(app_module, '_COLONIES_FILE', str(tmp_path / 'colonies.json'))
-    monkeypatch.setattr(app_module, '_ROUTES_FILE', str(tmp_path / 'routes.json'))
-    monkeypatch.setattr(app_module, '_SCOUTS_FILE', str(tmp_path / 'scouts.json'))
-    c = app_module.app.test_client()
-    assert c.get('/api/homeworld').status_code == 200
-    return c
-
-
 class _Response:
-    """httpx responses with Flask's get_json(), so one test body fits both."""
+    """httpx responses with a Flask-style get_json() (the tests were written
+    against the old Flask app)."""
     def __init__(self, r):
         self._r = r
         self.status_code = r.status_code
@@ -55,10 +45,21 @@ class _Response:
 class _Client:
     def __init__(self, tc):
         self._tc = tc
+        self.player_id = 1
 
     def as_player(self, player_id: int) -> None:
         from server.app import current_player_id
+        self.player_id = player_id
         self.api.dependency_overrides[current_player_id] = lambda: player_id
+
+    def survey(self, star_id: str) -> None:
+        from server.models import Player, Survey
+        with self.api.state.game.sessionmaker() as s:
+            if s.get(Player, self.player_id) is None:
+                s.add(Player(id=self.player_id, name=f'Player {self.player_id}', created_tick=0))
+                s.flush()
+            s.merge(Survey(player_id=self.player_id, star_id=star_id, surveyed_tick=0))
+            s.commit()
 
     def __getattr__(self, verb):
         return lambda *a, **kw: _Response(getattr(self._tc, verb)(*a, **kw))
@@ -66,8 +67,9 @@ class _Client:
 
 @pytest.fixture
 def fastapi_client(tmp_path, clock):
-    """The FastAPI server on a fresh SQLite database, ticker off (each
-    request catches the world up itself)."""
+    """The server on a fresh SQLite database, ticker off (each request
+    catches the world up itself). c.as_player(n) acts as player n;
+    c.survey(star_id) lets the current player know a system."""
     from fastapi.testclient import TestClient
     from server.app import Game, create_app
     from server.db import make_engine, make_sessionmaker
@@ -82,21 +84,11 @@ def fastapi_client(tmp_path, clock):
         yield c
 
 
-@pytest.fixture(params=['flask', 'fastapi'])
-def client(request):
-    """Both servers: the API tests must pass on each."""
-    return request.getfixturevalue(f'{request.param}_client')
+@pytest.fixture
+def client(fastapi_client):
+    return fastapi_client
 
 
 def colonies(client) -> dict:
     return {c['planetId']: c for c in client.get('/api/colonies').get_json()['colonies']}
 
-
-@pytest.fixture
-def flask_bug(request):
-    """flask_bug('why'): this test is expected to fail on the old Flask
-    server only (a known bug the database version fixes)."""
-    def mark(reason):
-        if request.node.callspec.params.get('client') == 'flask':
-            request.applymarker(pytest.mark.xfail(strict=True, reason='BUG: ' + reason))
-    return mark

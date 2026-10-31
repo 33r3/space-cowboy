@@ -1,0 +1,122 @@
+{
+ "homeworld": {
+  "planetId": "0,0:8:2"
+ },
+ "colonies": [
+  {
+   "planetId": "0,0:8:2",
+   "name": "Zeum III",
+   "cx": 0,
+   "cy": 0,
+   "starIndex": 8,
+   "founded": "2026-11-01",
+   "size": 5,
+   "developmentLevel": 3,
+   "isHomeworld": true,
+   "lastTickedAt": "2026-11-01T13:00:00+00:00",
+   "colonyYields": {
+    "food": 0.75,
+    "water": 0.75,
+    "organicFuels": 0.15,
+    "chemFeedstocks": 0.08,
+    "minerals": 0.3,
+    "fusionFuel": 0.08,
+    "metals": 0.15,
+    "radioactives": 0.03
+   },
+   "stockpiles": {
+    "food": 560.4,
+    "water": 588.3,
+    "minerals": 235.0,
+    "metals": 43.2,
+    "organicFuels": 137.5,
+    "chemFeedstocks": 126.0,
+    "fusionFuel": 116.0,
+    "radioactives": 34.5
+   },
+   "growthProgress": 40,
+   "starvationTicks": 0,
+   "status": "active",
+   "departedAt": null,
+   "transitTicks": null,
+   "sourcePlanetId": null,
+   "overCapTicks": 0
+  },
+  {
+   "planetId": "0,-1:1:2",
+   "name": "Kainai III",
+   "cx": 0,
+   "cy": -1,
+   "starIndex": 1,
+   "founded": "2026-11-01",
+   "status": "active",
+   "departedAt": null,
+   "transitTicks": null,
+   "sourcePlanetId": null,
+   "lastTickedAt": "2026-11-01T13:00:00+00:00",
+   "size": 1,
+   "developmentLevel": 1,
+   "growthProgress": 0,
+   "starvationTicks": 0,
+   "isHomeworld": false,
+   "stockpiles": {
+    "food": 10.0,
+    "water": 10.0,
+    "minerals": 5.0,
+    "metals": 5.0,
+    "organicFuels": 0.0,
+    "chemFeedstocks": 0.0,
+    "fusionFuel": 0.0,
+    "radioactives": 0.0
+   },
+   "colonyYields": {
+    "food": 0.05,
+    "water": 0.65,
+    "organicFuels": 0.2,
+    "chemFeedstocks": 0.0,
+    "minerals": 0.1,
+    "fusionFuel": 0.0,
+    "metals": 0.17,
+    "radioactives": 0.06
+   }
+  },
+  {
+   "planetId": "1,1:28:2",
+   "name": "Ososer III",
+   "cx": 1,
+   "cy": 1,
+   "starIndex": 28,
+   "founded": "2026-11-01",
+   "status": "in_transit",
+   "departedAt": "2026-11-01T13:00:00+00:00",
+   "transitTicks": 4,
+   "sourcePlanetId": "0,0:8:2",
+   "lastTickedAt": "2026-11-01T13:00:00+00:00",
+   "size": 1,
+   "developmentLevel": 1,
+   "growthProgress": 0,
+   "starvationTicks": 0,
+   "isHomeworld": false,
+   "stockpiles": {
+    "food": 10.0,
+    "water": 10.0,
+    "minerals": 5.0,
+    "metals": 5.0,
+    "organicFuels": 0.0,
+    "chemFeedstocks": 0.0,
+    "fusionFuel": 0.0,
+    "radioactives": 0.0
+   },
+   "colonyYields": {
+    "food": 0.24,
+    "water": 0.68,
+    "organicFuels": 0.21,
+    "chemFeedstocks": 0.0,
+    "minerals": 0.06,
+    "fusionFuel": 0.0,
+    "metals": 0.15,
+    "radioactives": 0.06
+   }
+  }
+ ]
+}

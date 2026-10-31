@@ -173,7 +173,10 @@ def test_terraform_api(fastapi_client, clock):
 
     c.as_player(2)
     assert c.post('/api/terraform', json={'planetId': HOMEWORLD, 'lever': 'pressure',
-                                          'target': 1}).status_code == 403
+                                          'target': 1}).status_code == 404    # unknown to p2
+    c.survey('0,0:8')
+    assert c.post('/api/terraform', json={'planetId': HOMEWORLD, 'lever': 'pressure',
+                                          'target': 1}).status_code == 403    # known, no colony
     assert c.delete(f'/api/terraform/{proj["id"]}').status_code == 404
     c.as_player(1)
     assert c.delete(f'/api/terraform/{proj["id"]}').get_json() == {'ok': True}

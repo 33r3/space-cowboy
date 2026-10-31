@@ -1,15 +1,21 @@
 """Old JSON saves import into the database as player 1."""
 import json
+import pathlib
 
 import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-import app as app_module
-from conftest import HOMEWORLD, NEAR_ID, colonies
+from conftest import HOMEWORLD
+from generation.config import DEFAULT_CONFIG
+from generation.density_field import DensityField
+from generation.homeworld import find_homeworld
 from server.importer import import_saves
 from server.models import Base, Colony, Event, Planet, Route, Ship
 from server.units import now_tick, to_float
+
+DATA = pathlib.Path(__file__).parent / 'data' / 'old_save'
+DENSITY = DensityField(DEFAULT_CONFIG)
 
 
 @pytest.fixture
@@ -20,34 +26,21 @@ def session():
         yield s
 
 
-def build_save(client, clock):
-    """Homeworld, a colony that has landed, a route and a scout in flight,
-    and a second colony ship still on its way."""
-    client.post('/api/colonies', json={'cx': 0, 'cy': -1, 'starIndex': 1, 'planetIndex': 2})
-    clock.advance(minutes=60)
-    colonies(client)
-    client.post('/api/routes', json={'name': 'Run', 'shipClass': 'freighter_mk1', 'legs': [
-        {'fromPlanetId': HOMEWORLD, 'toPlanetId': NEAR_ID, 'cargo': {'food': 5}},
-        {'fromPlanetId': NEAR_ID, 'toPlanetId': HOMEWORLD, 'cargo': {}}]})
-    client.post('/api/scouts', json={'sourcePlanetId': HOMEWORLD, 'destStarCx': 0,
-                                     'destStarCy': -1, 'destStarIndex': 1})
-    client.post('/api/colonies', json={'cx': 1, 'cy': 1, 'starIndex': 28, 'planetIndex': 2})
-    read = lambda p: json.load(open(p))
-    return (read(app_module._COLONIES_FILE), read(app_module._ROUTES_FILE),
-            read(app_module._SCOUTS_FILE))
+def load(name):
+    return json.load(open(DATA / f'{name}.json'))
 
 
-def test_import_round_trip(flask_client, clock, session):
-    client = flask_client
-    cols_json, routes_json, scouts_json = build_save(client, clock)
-    clock.advance(minutes=1)                       # the import catches colonies up
-    expected = colonies(client)
-    import_saves(session, cols_json, routes_json, scouts_json,
-                 app_module.config, app_module.density_field,
-                 homeworld=app_module.find_homeworld(app_module.config, app_module.density_field))
+def test_import_round_trip(clock, session):
+    """A save the old Flask app wrote (homeworld, a landed colony, a route
+    and a scout under way, a colony ship still flying) imports to what
+    Flask itself showed for it at that moment."""
+    expected = load('expected_colonies')
+    clock.advance(minutes=expected['now_minutes_after_start'])
+    import_saves(session, load('colonies'), load('routes'), load('scouts'), DEFAULT_CONFIG,
+                 DENSITY, homeworld=find_homeworld(DEFAULT_CONFIG, DENSITY))
     rows = {c.planet_id: c for c in session.scalars(select(Colony))}
-    assert set(rows) == set(expected)
-    for pid, col in expected.items():
+    assert set(rows) == set(expected['colonies'])
+    for pid, col in expected['colonies'].items():
         row = rows[pid]
         assert (row.status, row.size, row.dev_level, row.is_homeworld) == \
             (col['status'], col['size'], col['developmentLevel'], col['isHomeworld'])
