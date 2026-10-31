@@ -1,7 +1,7 @@
 # Foundation design: database, owners, event queue
 
-Status: draft for Brent's review (2026-10-31). Nothing here is built yet
-except the tests (tests/, 23 cases pinning today's behaviour).
+Status: steps 1-2 built 2026-10-31 (tables, importer, ticker); routes still on
+Flask + JSON until step 3.
 
 Target (Brent): 20-500 players per universe on a hosted server, persistent
 real-time (the universe runs while you're offline), 1 tick = 1 real minute.
@@ -166,3 +166,10 @@ spacing has to be enforced:
 - Filling outward from the core means later players land farther out,
   where planets are sparser; whether to compensate is a later balance
   question.
+
+## Measured (2026-10-31, SQLite, one core)
+
+One tick of the economy for 25,000 colonies (500 players x 50) takes
+about 2 s of the 60 s tick, after reading and writing in bulk; the
+per-object version took ~7 s. Yields are cached per planet. Still to
+watch: generation/chunk_generator.py's chunk cache never evicts.
