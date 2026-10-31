@@ -45,11 +45,14 @@ players        id, name, created_tick, homeworld_colony_id
                (accounts/logins come in the multiplayer step; a player row
                is enough for ownership now)
 
-colonies       id, owner_id -> players, planet_id UNIQUE, name,
+colonies       id, owner_id -> players, planet_id, name,
+               UNIQUE (planet_id, owner_id): players can share a planet,
+               one colony each
                cx, cy, star_index, founded_tick, status
                (in_transit | active | abandoned), size, dev_level,
-               growth_progress, starvation_ticks, is_homeworld,
-               colony_yields (JSON, fixed at founding)
+               growth_progress, starvation_ticks, is_homeworld
+               (yields are no longer frozen at founding: they come from
+               the planet's current state, see planets)
 
 stockpiles     colony_id, resource, amount        PK (colony_id, resource)
 
@@ -71,10 +74,18 @@ events         id, due_tick, kind, ref_id, processed_tick
 notifications  id, player_id, tick, message, read
                (replaces route['events'])
 
-planet_overrides
-               planet_id, data (JSON)
-               (homeworld fixes now; terraforming later. Replaces
-               data/homeworld.json as the source of patched planets)
+planets        planet_id PK, overrides (JSON), updated_tick
+               Shared state of a planet that someone has touched: the
+               generated planet + overrides = the planet everyone on it
+               lives with. Homeworld fixes now (replaces
+               data/homeworld.json); terraforming later.
+terraform_projects
+               id, planet_id, owner_id, target (JSON: e.g. pressure +0.2,
+               temperature -15 K), rate, started_tick, status
+               Several players can run projects on one planet, including
+               opposing ones; their effects add up each tick. Built in
+               the terraforming step, but the planet state is shared from
+               the start so that step needs no redesign.
 
 explored       player_id, chunk_key               PK (player_id, chunk_key)
                (fog of war moves from localStorage to the server)
@@ -119,10 +130,26 @@ Bug fixes that fall out of the schema:
    Flask is removed.
 4. Owners checks on every action (player 1 for now).
 
+## Shared planets (Brent, 2026-10-31)
+
+Players can share a planet, peacefully or not, and terraforming can be a
+weapon: make a world hostile to a rival who lacks the tech to adapt or the
+force to stop it. What that needs from the foundation:
+
+- One colony per player per planet; the planet's state is shared.
+- Yields and upkeep follow the planet's *current* habitability, recomputed
+  when it changes, so a terraformed planet hurts (or helps) everyone on it.
+- Per-player adaptation tech later offsets bad habitability for its owner
+  only (a sealed-habitat player shrugs off a toxic sky; a rival starves).
+- Notifications tell everyone on a planet when someone starts a project
+  there, so it can be contested.
+
+Not decided (game design, for later steps):
+- Sharing deposits: how colonies on one planet split its resources
+  (by colony size x dev? first come? each gets its own share?).
+- Diplomacy: whether "peaceful" sharing is a formal agreement in the game.
+
 ## Open questions for Brent (not blocking step 1)
 
-- One colony per planet across the whole universe (so planets are
-  contested and taken by force), or can several players share a planet?
-  The draft assumes one (planet_id UNIQUE).
 - Where new players start: their own generated homeworld somewhere in the
   galaxy (spread apart, or near others?). Today there is one homeworld.
