@@ -226,18 +226,25 @@ class World_:
         return ship
 
 
+def current_player_id() -> int:
+    """Who is asking. Everyone is player 1 until logins exist; tests
+    override this to act as someone else."""
+    return 1
+
+
 def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for every endpoint)
     galaxy = game.galaxy
 
-    def world():
+    def world(player_id: int = Depends(current_player_id)):
         """The request's World_: caught up to now, under the game lock,
-        committed if the handler returns normally."""
+        committed if the handler returns normally. Every lookup below goes
+        through the caller's own colonies, routes and ships."""
         game.catch_up()
         with game.lock, game.sessionmaker() as s:
             advance(s, galaxy, now_tick())
-            player = s.get(Player, 1)
+            player = s.get(Player, player_id)
             if player is None:
-                player = Player(id=1, name='Player 1', created_tick=now_tick())
+                player = Player(id=player_id, name=f'Player {player_id}', created_tick=now_tick())
                 s.add(player)
                 s.flush()
             yield World_(s, game, player)

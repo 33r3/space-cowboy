@@ -56,6 +56,10 @@ class _Client:
     def __init__(self, tc):
         self._tc = tc
 
+    def as_player(self, player_id: int) -> None:
+        from server.app import current_player_id
+        self.api.dependency_overrides[current_player_id] = lambda: player_id
+
     def __getattr__(self, verb):
         return lambda *a, **kw: _Response(getattr(self._tc, verb)(*a, **kw))
 
@@ -70,8 +74,10 @@ def fastapi_client(tmp_path, clock):
     from server.models import Base
     engine = make_engine(f'sqlite:///{tmp_path}/test.db')
     Base.metadata.create_all(engine)
-    with TestClient(create_app(Game(make_sessionmaker(engine)), run_ticker=False)) as tc:
+    api = create_app(Game(make_sessionmaker(engine)), run_ticker=False)
+    with TestClient(api) as tc:
         c = _Client(tc)
+        c.api = api
         assert c.get('/api/homeworld').status_code == 200
         yield c
 

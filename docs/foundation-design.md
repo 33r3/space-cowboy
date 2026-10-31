@@ -1,7 +1,7 @@
 # Foundation design: database, owners, event queue
 
-Status: steps 1-2 built 2026-10-31 (tables, importer, ticker); routes still on
-Flask + JSON until step 3.
+Status: steps 1-4 built 2026-10-31 (tables, importer, ticker, FastAPI, owner
+checks). Flask app.py kept until the client is tried on the new server.
 
 Target (Brent): 20-500 players per universe on a hosted server, persistent
 real-time (the universe runs while you're offline), 1 tick = 1 real minute.
