@@ -10,3 +10,4 @@ __pycache__/
 data/colonies.json
 data/routes.json
 data/scouts.json
+data/space_cowboy.db*

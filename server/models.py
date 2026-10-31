@@ -1,0 +1,136 @@
+"""Database tables (docs/foundation-design.md).
+
+Times are integer ticks (whole minutes since 2000-01-01 UTC). Resource
+amounts are integers in thousandths (1.5 food = 1500); see units.py.
+"""
+from sqlalchemy import JSON, Boolean, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class World(Base):
+    """One row: how far the ticker has advanced the universe."""
+    __tablename__ = 'world'
+    id:        Mapped[int] = mapped_column(Integer, primary_key=True)
+    last_tick: Mapped[int] = mapped_column(Integer)
+
+
+class Player(Base):
+    __tablename__ = 'players'
+    id:           Mapped[int] = mapped_column(Integer, primary_key=True)
+    name:         Mapped[str] = mapped_column(String(64))
+    created_tick: Mapped[int] = mapped_column(Integer)
+
+
+class Planet(Base):
+    """A planet someone has touched. Generated planet + overrides = the
+    planet everyone on it lives with (homeworld fixes now, terraforming
+    later)."""
+    __tablename__ = 'planets'
+    planet_id:    Mapped[str]  = mapped_column(String(64), primary_key=True)
+    overrides:    Mapped[dict] = mapped_column(JSON, default=dict)
+    updated_tick: Mapped[int]  = mapped_column(Integer)
+
+
+class Colony(Base):
+    __tablename__ = 'colonies'
+    __table_args__ = (UniqueConstraint('planet_id', 'owner_id'),)
+    id:               Mapped[int]  = mapped_column(Integer, primary_key=True)
+    owner_id:         Mapped[int]  = mapped_column(ForeignKey('players.id'), index=True)
+    planet_id:        Mapped[str]  = mapped_column(String(64), index=True)
+    name:             Mapped[str]  = mapped_column(String(64))
+    cx:               Mapped[int]  = mapped_column(Integer)
+    cy:               Mapped[int]  = mapped_column(Integer)
+    star_index:       Mapped[int]  = mapped_column(Integer)
+    founded_tick:     Mapped[int]  = mapped_column(Integer)
+    status:           Mapped[str]  = mapped_column(String(16))   # in_transit | active | abandoned
+    size:             Mapped[int]  = mapped_column(Integer, default=1)
+    dev_level:        Mapped[int]  = mapped_column(Integer, default=1)
+    growth_progress:  Mapped[int]  = mapped_column(Integer, default=0)
+    starvation_ticks: Mapped[int]  = mapped_column(Integer, default=0)
+    is_homeworld:     Mapped[bool] = mapped_column(Boolean, default=False)
+
+    stockpiles: Mapped[list['Stockpile']] = relationship(
+        back_populates='colony', cascade='all, delete-orphan')
+
+
+class Stockpile(Base):
+    __tablename__ = 'stockpiles'
+    colony_id: Mapped[int] = mapped_column(ForeignKey('colonies.id'), primary_key=True)
+    resource:  Mapped[str] = mapped_column(String(32), primary_key=True)
+    amount:    Mapped[int] = mapped_column(Integer, default=0)       # thousandths
+
+    colony: Mapped[Colony] = relationship(back_populates='stockpiles')
+
+
+class Ship(Base):
+    """Anything travelling: colony ships, scouts, route freighters. `cargo`
+    is what is actually aboard (thousandths), not what was ordered."""
+    __tablename__ = 'ships'
+    id:             Mapped[int]       = mapped_column(Integer, primary_key=True)
+    uid:            Mapped[str]       = mapped_column(String(36), unique=True)  # API id
+    owner_id:       Mapped[int]       = mapped_column(ForeignKey('players.id'), index=True)
+    kind:           Mapped[str]       = mapped_column(String(16))   # colony_ship | scout | freighter
+    status:         Mapped[str]       = mapped_column(String(16))   # in_transit | arrived
+    from_colony_id: Mapped[int | None] = mapped_column(ForeignKey('colonies.id'))
+    to_colony_id:   Mapped[int | None] = mapped_column(ForeignKey('colonies.id'))
+    to_star_id:     Mapped[str | None] = mapped_column(String(64))
+    departed_tick:  Mapped[int]       = mapped_column(Integer)
+    arrival_tick:   Mapped[int]       = mapped_column(Integer)
+    cargo:          Mapped[dict]      = mapped_column(JSON, default=dict)
+
+
+class Route(Base):
+    __tablename__ = 'routes'
+    id:          Mapped[str]       = mapped_column(String(16), primary_key=True)   # API routeId
+    owner_id:    Mapped[int]       = mapped_column(ForeignKey('players.id'), index=True)
+    name:        Mapped[str]       = mapped_column(String(128))
+    ship_class:  Mapped[str]       = mapped_column(String(32))
+    status:      Mapped[str]       = mapped_column(String(16))      # active | paused
+    current_leg: Mapped[int]       = mapped_column(Integer, default=0)
+    ship_id:     Mapped[int | None] = mapped_column(ForeignKey('ships.id'))
+
+    legs: Mapped[list['RouteLeg']] = relationship(
+        back_populates='route', cascade='all, delete-orphan', order_by='RouteLeg.idx')
+
+
+class RouteLeg(Base):
+    __tablename__ = 'route_legs'
+    route_id:       Mapped[str]  = mapped_column(ForeignKey('routes.id'), primary_key=True)
+    idx:            Mapped[int]  = mapped_column(Integer, primary_key=True)
+    from_colony_id: Mapped[int]  = mapped_column(ForeignKey('colonies.id'))
+    to_colony_id:   Mapped[int]  = mapped_column(ForeignKey('colonies.id'))
+    cargo:          Mapped[dict] = mapped_column(JSON, default=dict)   # ordered, thousandths
+
+    route: Mapped[Route] = relationship(back_populates='legs')
+
+
+class Event(Base):
+    """Something due at a tick: the ticker runs these, oldest first, before
+    the economy."""
+    __tablename__ = 'events'
+    __table_args__ = (Index('ix_events_pending', 'processed_tick', 'due_tick'),)
+    id:             Mapped[int]       = mapped_column(Integer, primary_key=True)
+    due_tick:       Mapped[int]       = mapped_column(Integer)
+    kind:           Mapped[str]       = mapped_column(String(32))   # ship_arrives
+    ref_id:         Mapped[int]       = mapped_column(Integer)
+    processed_tick: Mapped[int | None] = mapped_column(Integer)
+
+
+class Notification(Base):
+    __tablename__ = 'notifications'
+    id:        Mapped[int]       = mapped_column(Integer, primary_key=True)
+    player_id: Mapped[int]       = mapped_column(ForeignKey('players.id'), index=True)
+    tick:      Mapped[int]       = mapped_column(Integer)
+    message:   Mapped[str]       = mapped_column(String(512))
+    read:      Mapped[bool]      = mapped_column(Boolean, default=False)
+    route_id:  Mapped[str | None] = mapped_column(ForeignKey('routes.id', ondelete='SET NULL'))
+
+
+class Explored(Base):
+    __tablename__ = 'explored'
+    player_id: Mapped[int] = mapped_column(ForeignKey('players.id'), primary_key=True)
+    chunk_key: Mapped[str] = mapped_column(String(32), primary_key=True)
