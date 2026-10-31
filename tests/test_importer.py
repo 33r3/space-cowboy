@@ -37,7 +37,8 @@ def build_save(client, clock):
             read(app_module._SCOUTS_FILE))
 
 
-def test_import_round_trip(client, clock, session):
+def test_import_round_trip(flask_client, clock, session):
+    client = flask_client
     cols_json, routes_json, scouts_json = build_save(client, clock)
     clock.advance(minutes=1)                       # the import catches colonies up
     expected = colonies(client)

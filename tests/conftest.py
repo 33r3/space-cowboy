@@ -32,8 +32,8 @@ def clock():
 
 
 @pytest.fixture
-def client(tmp_path, monkeypatch, clock):
-    """The Flask app with its save files in a temp dir and the clock frozen."""
+def flask_client(tmp_path, monkeypatch, clock):
+    """The old Flask app with its save files in a temp dir and the clock frozen."""
     monkeypatch.setattr(app_module, '_COLONIES_FILE', str(tmp_path / 'colonies.json'))
     monkeypatch.setattr(app_module, '_ROUTES_FILE', str(tmp_path / 'routes.json'))
     monkeypatch.setattr(app_module, '_SCOUTS_FILE', str(tmp_path / 'scouts.json'))
@@ -42,5 +42,55 @@ def client(tmp_path, monkeypatch, clock):
     return c
 
 
+class _Response:
+    """httpx responses with Flask's get_json(), so one test body fits both."""
+    def __init__(self, r):
+        self._r = r
+        self.status_code = r.status_code
+
+    def get_json(self):
+        return self._r.json()
+
+
+class _Client:
+    def __init__(self, tc):
+        self._tc = tc
+
+    def __getattr__(self, verb):
+        return lambda *a, **kw: _Response(getattr(self._tc, verb)(*a, **kw))
+
+
+@pytest.fixture
+def fastapi_client(tmp_path, clock):
+    """The FastAPI server on a fresh SQLite database, ticker off (each
+    request catches the world up itself)."""
+    from fastapi.testclient import TestClient
+    from server.app import Game, create_app
+    from server.db import make_engine, make_sessionmaker
+    from server.models import Base
+    engine = make_engine(f'sqlite:///{tmp_path}/test.db')
+    Base.metadata.create_all(engine)
+    with TestClient(create_app(Game(make_sessionmaker(engine)), run_ticker=False)) as tc:
+        c = _Client(tc)
+        assert c.get('/api/homeworld').status_code == 200
+        yield c
+
+
+@pytest.fixture(params=['flask', 'fastapi'])
+def client(request):
+    """Both servers: the API tests must pass on each."""
+    return request.getfixturevalue(f'{request.param}_client')
+
+
 def colonies(client) -> dict:
     return {c['planetId']: c for c in client.get('/api/colonies').get_json()['colonies']}
+
+
+@pytest.fixture
+def flask_bug(request):
+    """flask_bug('why'): this test is expected to fail on the old Flask
+    server only (a known bug the database version fixes)."""
+    def mark(reason):
+        if request.node.callspec.params.get('client') == 'flask':
+            request.applymarker(pytest.mark.xfail(strict=True, reason='BUG: ' + reason))
+    return mark

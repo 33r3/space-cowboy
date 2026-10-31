@@ -7,6 +7,13 @@ from generation.chunk_generator import regenerate_star
 from generation.planet_factory import generate_system
 
 
+def split_star_id(star_id: str) -> tuple[int, int, int]:
+    """'cx,cy:star' -> (cx, cy, star_index)."""
+    chunk, star = star_id.split(':')
+    cx, cy = map(int, chunk.split(','))
+    return cx, cy, int(star)
+
+
 def split_planet_id(planet_id: str) -> tuple[int, int, int]:
     """'cx,cy:star:planet' -> (cx, cy, star_index)."""
     chunk, star, _ = planet_id.split(':')

@@ -125,9 +125,9 @@ def test_route_edit_and_delete(client, clock):
     assert client.delete(f'/api/routes/{rid}').status_code == 404
 
 
-@pytest.mark.xfail(strict=True, reason='BUG: a route loads what the colony has but '
-                   'delivers the full declared cargo, creating resources')
-def test_routes_cannot_create_resources(client, clock):
+def test_routes_cannot_create_resources(client, clock, flask_bug):
+    flask_bug('a route loads what the colony has but delivers the full declared '
+              'cargo, creating resources')
     arrived_colony(client, clock)
     # the new colony starts with 10 food; ask it to ship 20 back every trip
     client.post('/api/routes', json=route_body({}, {'food': 20}))
@@ -137,7 +137,10 @@ def test_routes_cannot_create_resources(client, clock):
     cols = colonies(client)
     produced = sum(c['netFlowPerTick']['food'] for c in cols.values()) * 4
     total1 = sum(c['stockpiles']['food'] for c in cols.values())
-    assert total1 <= total0 + produced + 0.01
+    # within 1 food: a colony with an empty larder can't eat below zero, so
+    # it eats less than its listed net flow (the bug made ~10 per trip; the
+    # exact check is test_ticker's, with the economy switched off)
+    assert total1 <= total0 + produced + 1
 
 
 def test_scouts_launch_spend_and_arrive(client, clock):
@@ -155,9 +158,9 @@ def test_scouts_launch_spend_and_arrive(client, clock):
     assert s['status'] == 'arrived'
 
 
-@pytest.mark.xfail(strict=True, reason='BUG: a colony that arrived while nobody was '
-                   'looking starts ticking from the next read, not from its arrival')
-def test_arrival_ticks_count_from_arrival(client, clock):
+def test_arrival_ticks_count_from_arrival(client, clock, flask_bug):
+    flask_bug('a colony that arrived while nobody was looking starts ticking from '
+              'the next read, not from its arrival')
     colonize(client)
     clock.advance(minutes=4 + 20)                     # arrived 20 ticks ago
     from generation.colony_economics import STARTER_STOCKPILES
