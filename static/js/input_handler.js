@@ -126,6 +126,12 @@ export class InputHandler {
       if (e.key.toLowerCase() === 'n') {
         this.onNotesToggle?.()
       }
+      if (e.key === '?') {
+        this.onHelpToggle?.()
+      }
+      if (e.key === 'Escape') {
+        this.onEscape?.()
+      }
     }
 
     this._onKeyUp = (e) => {

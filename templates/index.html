@@ -521,6 +521,30 @@
       #tf-start { width: 100%; margin-top: 6px; padding: 5px; }
       .tf-stop { padding: 0 4px; color: #cc8844; border-color: rgba(160, 100, 60, 0.5); }
 
+      /* How to play */
+      #help-overlay {
+        display: none; position: absolute; inset: 0; z-index: 200;
+        background: rgba(2, 5, 10, 0.7);
+      }
+      #help-box {
+        position: relative; max-width: 560px; max-height: 86vh; overflow-y: auto;
+        margin: 6vh auto 0; padding: 20px 26px;
+        background: rgba(6, 12, 22, 0.98); border: 1px solid rgba(80, 120, 180, 0.5);
+        border-radius: 6px; color: #88aacc; font-family: 'Courier New', monospace;
+        font-size: 12px; line-height: 1.6;
+      }
+      #help-box h2 { color: #aaccee; font-size: 15px; margin: 0 0 8px; }
+      #help-box h3 { color: #ffd700; font-size: 11px; letter-spacing: 1px;
+                     text-transform: uppercase; margin: 14px 0 4px; }
+      #help-box b { color: #aaccee; }
+      #help-box ol { padding-left: 20px; margin: 4px 0; }
+      #help-box li { margin-bottom: 4px; }
+      #help-close {
+        position: absolute; top: 12px; right: 14px; background: none; border: none;
+        color: #445566; font-size: 14px; cursor: pointer;
+      }
+      #help-close:hover { color: #aaccee; }
+
       /* Notifications */
       #notes-badge {
         position: absolute; top: 12px; right: 16px; z-index: 110; cursor: pointer;
@@ -549,6 +573,47 @@
       <div><span class="key">chunks</span> <span id="hud-chunks">0</span></div>
       <div><span class="key">seed</span> <span id="hud-seed">42</span></div>
     </div>
+    <div id="help-overlay">
+      <div id="help-box">
+        <button id="help-close" title="Close (? or Esc)">✕</button>
+        <h2>How to play</h2>
+        <p>You run a young interstellar civilization from one homeworld. The universe runs
+        in real time: <b>one tick is one real minute</b>, and it keeps going while you're away.</p>
+
+        <h3>You start with</h3>
+        <p><b>Zeum III</b> (gold), a Town at <b>Advanced</b> development: already able to
+        colonize and send scouts, with enough metals to settle a world right away.</p>
+
+        <h3>First steps</h3>
+        <ol>
+          <li><b>Scout.</b> Click a star to send a probe (about a minute per 60 Ly).
+          Probes clear the fog around where they arrive.</li>
+          <li><b>Colonize.</b> Scroll in on a star until its planets show, click one, check its
+          <b>habitability</b> (higher = cheaper, bigger colonies; under 45 it needs water and
+          metals every tick) and <b>potential yields</b>, then <b>Found Colony</b>.</li>
+          <li><b>Trade (T).</b> With two colonies, a freighter can loop between them:
+          food out to a young colony, metals back.</li>
+          <li><b>Upgrade.</b> The button in a colony's panel. Higher development means longer
+          range, bigger freighters and faster terraforming.</li>
+          <li><b>Terraform.</b> Bottom of a planet's panel, from Advanced colonies: push its
+          temperature or pressure. It takes days, and it can make a world better for you
+          or worse for a rival living there.</li>
+        </ol>
+
+        <h3>Keep colonies alive</h3>
+        <p>Watch the <b>net</b> column of a colony's resource flows: red means that stock is
+        shrinking. Short of anything it needs for 10 ticks in a row, a colony loses a
+        development level; at the lowest level it's abandoned (your homeworld never is).</p>
+
+        <h3>A good first session</h3>
+        <p>Scout two or three nearby stars, settle the best world in reach, set up a food or
+        water route to it, and come back in a few hours to upgrade.</p>
+
+        <h3>Keys</h3>
+        <p>drag pan · scroll zoom · <b>R</b> back home · <b>L</b> colonies · <b>T</b> trade routes ·
+        <b>N</b> notifications · <b>?</b> this help</p>
+      </div>
+    </div>
     <div id="notes-badge" title="Notifications (N)">✉</div>
     <div id="notes-panel">
       <div class="cp-section-label">Notifications</div>
@@ -557,12 +622,13 @@
     <div id="controls">
       <div>drag — pan camera</div>
       <div>scroll — zoom</div>
-      <div>click — move ship / planet</div>
+      <div>click — star: scout · planet: details</div>
       <div>` — debug overlay</div>
-      <div>R — reset camera</div>
+      <div>R — back home</div>
       <div>T — trade routes</div>
       <div>L — colony list</div>
       <div>N — notifications</div>
+      <div>? — how to play</div>
     </div>
 
     <div id="colony-panel">

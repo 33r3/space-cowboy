@@ -81,6 +81,20 @@ const notifications = new Notifications(
   document.getElementById('notes-badge'))
 input.onNotesToggle = () => notifications.toggle()
 
+// How to play: ? toggles it; shown once on a first visit
+const helpOverlay = document.getElementById('help-overlay')
+const setHelp = open => { helpOverlay.style.display = open ? 'block' : 'none' }
+input.onHelpToggle = () => setHelp(helpOverlay.style.display !== 'block')
+input.onEscape = () => setHelp(false)
+document.getElementById('help-close').addEventListener('click', () => setHelp(false))
+helpOverlay.addEventListener('click', e => { if (e.target === helpOverlay) setHelp(false) })
+try {
+  if (!localStorage.getItem('space-cowboy-seen-help')) {
+    setHelp(true)
+    localStorage.setItem('space-cowboy-seen-help', '1')
+  }
+} catch { /* storage blocked: no first-visit help, ? still works */ }
+
 // ── Colony panel ──────────────────────────────────────────────────────────────
 
 const colonyPanel        = document.getElementById('colony-panel')
