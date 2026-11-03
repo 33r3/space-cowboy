@@ -165,3 +165,9 @@ def test_arrival_ticks_count_from_arrival(client, clock):
     clock.advance(minutes=4 + 20)                     # arrived 20 ticks ago
     from generation.colony_economics import STARTER_STOCKPILES
     assert colonies(client)[NEAR_ID]['stockpiles'] != STARTER_STOCKPILES
+
+
+def test_scripts_are_revalidated_so_updates_reach_the_browser(client):
+    r = client._tc.get('/static/js/main.js')
+    assert r.status_code == 200 and r.headers['cache-control'] == 'no-cache'
+    assert client._tc.get('/').headers['cache-control'] == 'no-cache'

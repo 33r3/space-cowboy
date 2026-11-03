@@ -58,6 +58,16 @@ HOMEWORLD_STOCKPILES = {
 }
 
 
+class _Revalidated(StaticFiles):
+    """Static files the browser must check (a cheap 304 when unchanged)
+    before reusing: without this it keeps old scripts for hours after an
+    update, and the page and its scripts disagree."""
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers['Cache-Control'] = 'no-cache'
+        return resp
+
+
 class Game:
     """Everything a request needs: the galaxy, the database, the lock."""
     def __init__(self, sessionmaker, config=DEFAULT_CONFIG):
@@ -90,7 +100,7 @@ def create_app(game: Game | None = None, run_ticker: bool = True) -> FastAPI:
 
     api = FastAPI(lifespan=lifespan)
     api.state.game = game
-    api.mount('/static', StaticFiles(directory=os.path.join(ROOT, 'static')), name='static')
+    api.mount('/static', _Revalidated(directory=os.path.join(ROOT, 'static')), name='static')
 
     @api.exception_handler(HTTPException)
     async def _error(_req, exc: HTTPException):           # {'error': ...} like Flask did
@@ -275,7 +285,8 @@ def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for ever
 
     @api.get('/')
     def index():
-        return FileResponse(os.path.join(ROOT, 'templates', 'index.html'))
+        return FileResponse(os.path.join(ROOT, 'templates', 'index.html'),
+                            headers={'Cache-Control': 'no-cache'})
 
     @api.get('/api/config')
     def api_config():
