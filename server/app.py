@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, select
@@ -99,6 +100,7 @@ def create_app(game: Game | None = None, run_ticker: bool = True) -> FastAPI:
             task.cancel()
 
     api = FastAPI(lifespan=lifespan)
+    api.add_middleware(GZipMiddleware, minimum_size=2000)     # the planet list is ~1.4 MB raw
     api.state.game = game
     api.mount('/static', _Revalidated(directory=os.path.join(ROOT, 'static')), name='static')
 
@@ -700,6 +702,60 @@ def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for ever
             return {'ok': True, 'scrapped': True}
         sh.trade = {**(sh.trade or {}), 'retire': True}
         return {'ok': True, 'scrapped': False}
+
+    # ── Planet browser ─────────────────────────────────────────────────────────
+
+    @api.get('/api/planets')
+    def api_planets(w: World_ = W):
+        """Every planet the caller knows (surveys and sensors), with what
+        it takes to settle it: for the planet browser to filter and sort."""
+        star_ids = sorted(w.vision.known_star_ids())
+        mine = {c.planet_id: c for c in w.colonies()}
+        sources = []
+        for c in mine.values():
+            if c.status == 'active':
+                pos = galaxy.star_pos(*_colony_star(c))
+                if pos:
+                    sources.append((c, pos))
+        others: dict[str, int] = {}
+        for pid, n in w.s.execute(select(Colony.planet_id, Colony.id).where(
+                Colony.owner_id != w.player.id, Colony.status != 'abandoned')).all():
+            others[pid] = others.get(pid, 0) + 1
+        overrides = dict(w.s.execute(select(Planet.planet_id, Planet.overrides)).all())
+        rows = []
+        for sid in star_ids:
+            cx, cy, idx = split_star_id(sid)
+            star = galaxy.star(cx, cy, idx)
+            system = galaxy.system(cx, cy, idx)
+            if star is None or system is None:
+                continue
+            sx, sy = star['worldX'], star['worldY']
+            near, near_d, reach = None, math.inf, False
+            for c, (x, y) in sources:
+                d = math.hypot(x - sx, y - sy)
+                if d < near_d:
+                    near, near_d = c, d
+                if c.dev_level >= MIN_DEV_TO_COLONIZE and d <= colonization_range(c.dev_level):
+                    reach = True
+            for base in system['planets']:
+                p = galaxy.planet(base['id'], overrides.get(base['id'])) if base['id'] in overrides else base
+                hab = p['habitability']['total']
+                col = mine.get(p['id'])
+                net = ol.outpost(p['colonyYields'], hab)
+                rows.append({
+                    'id': p['id'], 'name': p['name'], 'index': p['index'],
+                    'starId': sid, 'starName': star['name'], 'cx': cx, 'cy': cy, 'starIndex': idx,
+                    'starX': sx, 'starY': sy,
+                    'type': p['planetType'], 'hab': hab, 'habCategory': p['habitability']['category'],
+                    'sizeCap': tf.size_cap(hab), 'tempK': round(p['surfaceTempK']),
+                    'yields': {k: round(v, 3) for k, v in p['colonyYields'].items() if v},
+                    'outpostFood': round(net['food'], 3), 'outpostWater': round(net['water'], 3),
+                    'distance': None if near is None else round(near_d, 1),
+                    'nearestColony': near.name if near else None,
+                    'inRange': reach, 'cost': colonization_cost(hab),
+                    'mine': col.status if col else None, 'others': others.get(p['id'], 0),
+                })
+        return {'planets': rows}
 
     # ── Outlook ────────────────────────────────────────────────────────────────
 

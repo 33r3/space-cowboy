@@ -129,6 +129,9 @@ export class InputHandler {
       if (e.key.toLowerCase() === 'e') {
         this.onOutlookToggle?.()
       }
+      if (e.key.toLowerCase() === 'p') {
+        this.onPlanetsToggle?.()
+      }
       if (e.key === '?') {
         this.onHelpToggle?.()
       }

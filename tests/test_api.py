@@ -171,3 +171,19 @@ def test_scripts_are_revalidated_so_updates_reach_the_browser(client):
     r = client._tc.get('/static/js/main.js')
     assert r.status_code == 200 and r.headers['cache-control'] == 'no-cache'
     assert client._tc.get('/').headers['cache-control'] == 'no-cache'
+
+
+def test_planet_browser_lists_known_planets_only(client, clock):
+    from conftest import NEAR_ID, NEAR_STAR
+    rows = client.get('/api/planets').get_json()['planets']
+    ids = {r['id'] for r in rows}
+    assert HOMEWORLD in ids and NEAR_ID not in ids          # not surveyed yet
+    home = next(r for r in rows if r['id'] == HOMEWORLD)
+    assert home['mine'] == 'active' and home['distance'] == 0 and home['inRange']
+    client.survey(NEAR_STAR)
+    rows = client.get('/api/planets').get_json()['planets']
+    near = next(r for r in rows if r['id'] == NEAR_ID)
+    assert near['mine'] is None and near['distance'] == pytest.approx(181, abs=1)
+    assert near['inRange'] and near['cost'] and 'outpostFood' in near
+    client.as_player(2)
+    assert all(r['id'] != NEAR_ID for r in client.get('/api/planets').get_json()['planets'])

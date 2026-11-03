@@ -48,6 +48,10 @@ class Galaxy:
         s = self.star(cx, cy, index)
         return generate_system(s) if s else None
 
+    def system(self, cx: int, cy: int, index: int) -> dict | None:
+        """The generated system (cached; don't mutate it)."""
+        return self._system(cx, cy, index)
+
     def planet(self, planet_id: str, overrides: dict | None = None) -> dict | None:
         """The planet as everyone on it lives with it. Callers get their own
         top-level copy (don't mutate the nested layers)."""

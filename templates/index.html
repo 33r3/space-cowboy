@@ -457,6 +457,31 @@
       .ol-line { display: flex; gap: 10px; font-size: 10px; line-height: 1.6; color: #88aacc; padding-left: 8px; flex-wrap: wrap; }
       .ol-line span:first-child { width: 64px; color: #667788; }
       .ol-outpost { font-size: 10px; line-height: 1.6; color: #556677; margin-top: 4px; }
+      #planet-browser {
+        display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        background: rgba(6, 12, 22, 0.97); border: 1px solid rgba(80, 120, 180, 0.4);
+        border-radius: 6px; padding: 14px 16px; color: #88aacc;
+        font-family: 'Courier New', monospace; font-size: 11px;
+        width: min(1080px, 96vw); z-index: 110;
+      }
+      .pb-filters { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 6px 0; font-size: 10px; }
+      .pb-filters input, .pb-filters select, .pb-reset {
+        background: rgba(10, 20, 35, 0.9); color: #aaccee; border: 1px solid rgba(80, 120, 180, 0.3);
+        font: inherit; font-size: 10px; padding: 2px 4px;
+      }
+      .pb-filters input[type=number] { width: 48px; }
+      .pb-filters input[type=checkbox] { padding: 0; vertical-align: middle; accent-color: #4488aa; }
+      .pb-q { width: 130px; }
+      .pb-reset { cursor: pointer; }
+      .pb-count { font-size: 10px; color: #556677; margin-bottom: 4px; }
+      .pb-scroll { max-height: 66vh; overflow: auto; }
+      .pb-table th { position: sticky; top: 0; background: rgba(6, 12, 22, 1); cursor: pointer; white-space: nowrap; }
+      .pb-table th:hover { color: #aaccee; }
+      .pb-table td { white-space: nowrap; }
+      .pb-table td:nth-child(-n+2) { text-align: left; }
+      .pb-table th:nth-child(-n+2) { text-align: left; }
+      .pb-table tbody tr { cursor: pointer; }
+      .pb-table tbody tr:hover td { background: rgba(60, 100, 160, 0.18); color: #cce0ff; }
       #colony-list-panel {
         display: none;
         position: absolute;
@@ -623,6 +648,9 @@
           a star to send a probe (about a minute per 60 Ly): it surveys that system and its
           neighbours, and you can only settle worlds you know. Known systems have a
           <span style="color:#44ffcc">teal ring</span> on the map.</li>
+          <li><b>Find worlds (P).</b> The planet browser lists every planet you know: filter by
+          type, habitability, distance, what it makes, whether an outpost there feeds itself;
+          click a column to sort, a row to fly there.</li>
           <li><b>Colonize.</b> Scroll in on a known star until its planets show, click one, check its
           <b>habitability</b> (higher = cheaper, bigger colonies; under 45 it needs water and
           metals every tick) and <b>potential yields</b>, then <b>Found Colony</b>.</li>
@@ -649,7 +677,7 @@
         trader to keep it supplied, and come back in a few hours to upgrade.</p>
 
         <h3>Keys</h3>
-        <p>drag pan · scroll zoom · <b>R</b> back home · <b>L</b> colonies · <b>T</b> trade · <b>E</b> outlook ·
+        <p>drag pan · scroll zoom · <b>R</b> back home · <b>L</b> colonies · <b>T</b> trade · <b>E</b> outlook · <b>P</b> planets ·
         <b>N</b> notifications · <b>?</b> this help</p>
       </div>
     </div>
@@ -667,6 +695,7 @@
       <div>R — back home</div>
       <div>T — trade</div>
       <div>E — economic outlook</div>
+      <div>P — planet browser</div>
       <div>L — colony list</div>
       <div>N — notifications</div>
       <div>? — how to play</div>
@@ -812,6 +841,7 @@
     </div>
 
     <div id="outlook-panel"></div>
+    <div id="planet-browser"></div>
 
     <div id="colony-list-panel">
       <div class="cl-header">

@@ -10,6 +10,7 @@ import { renderTerraform } from './terraform_panel.js'
 import { renderMarket } from './market_panel.js'
 import { TraderManager, renderTraderForm, renderTraderList } from './trader_manager.js'
 import { OutlookPanel, outpostLine } from './outlook_panel.js'
+import { PlanetBrowser } from './planet_browser.js'
 import { Notifications } from './notifications.js'
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -95,11 +96,28 @@ input.onOutlookToggle = () => {
 }
 document.getElementById('outlook-btn')?.addEventListener('click', () => input.onOutlookToggle())
 
+// Planet browser: a row flies to its star (centred, so the whole system
+// shows) and opens the planet's panel
+const planetBrowser = new PlanetBrowser(document.getElementById('planet-browser'), async row => {
+  planetBrowser.hide()
+  camera.worldX = row.starX
+  camera.worldY = row.starY
+  camera.zoom   = Math.max(camera.zoom, 150)
+  try {
+    const r = await fetch(`/api/system?cx=${row.cx}&cy=${row.cy}&index=${row.starIndex}`)
+    if (!r.ok) return
+    const system = await r.json()
+    const planet = system.planets.find(p => p.id === row.id)
+    if (planet) { scoutPanel.style.display = 'none'; openColonyPanel(planet, system) }
+  } catch { /* the camera still moved */ }
+})
+input.onPlanetsToggle = () => planetBrowser.toggle()
+
 // How to play: ? toggles it; shown once on a first visit
 const helpOverlay = document.getElementById('help-overlay')
 const setHelp = open => { helpOverlay.style.display = open ? 'block' : 'none' }
 input.onHelpToggle = () => setHelp(helpOverlay.style.display !== 'block')
-input.onEscape = () => setHelp(false)
+input.onEscape = () => { setHelp(false); planetBrowser.hide() }
 document.getElementById('help-close').addEventListener('click', () => setHelp(false))
 helpOverlay.addEventListener('click', e => { if (e.target === helpOverlay) setHelp(false) })
 try {
