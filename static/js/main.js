@@ -660,13 +660,68 @@ const clList          = document.getElementById('cl-list')
 
 const SIZE_NAMES_SHORT = ['Outpost', 'Settlement', 'Town', 'City', 'Megacity']
 
+// What a colony still needs for its next development level, and when it
+// gets there at today's rates (null eta: it won't by itself)
+function _upgradeNeeds(col) {
+  if (!col.upgradeCost || (col.developmentLevel ?? 1) >= 5) return null
+  const missing = {}
+  let eta = 0
+  for (const [k, need] of Object.entries(col.upgradeCost)) {
+    const short = need - (col.stockpiles?.[k] ?? 0)
+    if (short <= 0) continue
+    missing[k] = short
+    const net = col.netFlowPerTick?.[k] ?? 0
+    eta = net > 0 && eta !== null ? Math.max(eta, short / net) : null
+  }
+  return { missing, eta }
+}
+
+function _ticksText(t) {
+  return t < 60 ? `${Math.max(1, Math.round(t))} min` : t < 1440 ? `${(t / 60).toFixed(1)} h` : `${(t / 1440).toFixed(1)} days`
+}
+
+function _upgradeLine(col) {
+  const dev = col.developmentLevel ?? 1
+  if (dev >= 5) return ''
+  const next = DEV_NAMES[dev]
+  if (col.canUpgradeDev) {
+    return `<div class="cl-up cl-ready">▲ ready → ${next}
+      <button class="cl-upgrade-btn" data-pid="${col.planetId}">Upgrade</button></div>`
+  }
+  const n = _upgradeNeeds(col)
+  if (!n) return ''
+  const miss = Object.entries(n.missing)
+    .map(([k, v]) => `${Math.ceil(v)} ${RES_LABELS[k] ?? k}`).join(' · ')
+  const when = n.eta !== null && Object.keys(n.missing).length
+    ? `~${_ticksText(n.eta)} at current rates`
+    : '<span style="color:#cc8844">won\'t get there alone</span>'
+  return `<div class="cl-up">→ ${next}: needs ${miss}<br>${when}
+    <label title="Free traders bring this colony its upgrade cost"><input type="checkbox" class="cl-save"
+      data-pid="${col.planetId}" ${col.saveForUpgrade ? 'checked' : ''}> save for it</label></div>`
+}
+
+let _clShow = 'all'      // all | ready | growing (not yet Transcendent)
+try { _clShow = localStorage.getItem('space-cowboy-colony-filter') ?? 'all' } catch { /* default */ }
+
 function _renderColonyList() {
-  const all = colonyManager.colonies
-  if (!all.length) {
+  const everyone = colonyManager.colonies
+  if (!everyone.length) {
     clList.innerHTML = '<div class="cl-empty">No colonies founded yet.</div>'
     return
   }
-  clList.innerHTML = all.map(col => {
+  const live = everyone.filter(c => c.status === 'active')
+  const ready = live.filter(c => c.canUpgradeDev).length
+  const all = _clShow === 'ready' ? live.filter(c => c.canUpgradeDev)
+            : _clShow === 'growing' ? live.filter(c => (c.developmentLevel ?? 1) < 5)
+            : everyone
+  const header = `<div class="cl-summary">${live.length} active · ${
+    ready ? `<span style="color:#44cc88">${ready} ready to upgrade</span>` : 'none ready to upgrade'}
+    <select class="cl-show">
+      <option value="all">show all</option>
+      <option value="ready">ready to upgrade</option>
+      <option value="growing">not yet Transcendent</option>
+    </select></div>`
+  clList.innerHTML = header + (all.length ? '' : '<div class="cl-empty">None right now.</div>') + all.map(col => {
     const isHW       = colonyManager.isHomeworld(col.planetId)
     const isTransit  = col.status === 'in_transit'
     const isAbandoned = col.isAbandoned || col.status === 'abandoned'
@@ -687,26 +742,66 @@ function _renderColonyList() {
     } else {
       const sz  = SIZE_NAMES_SHORT[(col.size ?? 1) - 1] ?? 'Outpost'
       const dev = col.developmentLevel ?? 1
-      detail = `${sz} · Dev ${dev}`
+      detail = `${sz} · Dev ${dev} ${DEV_NAMES[dev - 1] ?? ''}`
     }
 
-    return `<div class="cl-entry">
+    return `<div class="cl-entry${col.canUpgradeDev && !isAbandoned ? ' cl-entry-ready' : ''}">
       <div class="cl-icon" style="color:${color}">${icon}</div>
       <div class="cl-info">
         <div class="cl-name" style="color:${color}">${col.name}</div>
         <div class="cl-detail">${detail}</div>
+        ${col.status === 'active' ? _upgradeLine(col) : ''}
+        <div class="cl-error" data-pid="${col.planetId}"></div>
       </div>
       <button class="cl-zoom-btn" data-pid="${col.planetId}">→</button>
     </div>`
   }).join('')
 
+  const show = clList.querySelector('.cl-show')
+  show.value = _clShow
+  show.addEventListener('change', () => {
+    _clShow = show.value
+    try { localStorage.setItem('space-cowboy-colony-filter', _clShow) } catch { /* not remembered */ }
+    _renderColonyList()
+  })
+
   clList.querySelectorAll('.cl-zoom-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const col = colonyManager.getColony(btn.dataset.pid)
       if (!col?.planet) return
-      camera.worldX = col.planet.worldX
-      camera.worldY = col.planet.worldY
+      // centre the star, so the whole system shows (an outer planet alone
+      // left the view empty)
+      camera.worldX = col.starX ?? col.planet.worldX
+      camera.worldY = col.starY ?? col.planet.worldY
       camera.zoom   = Math.max(camera.zoom, 150)
+    })
+  })
+
+  clList.querySelectorAll('.cl-upgrade-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true
+      btn.textContent = '…'
+      try {
+        await colonyManager.upgradeColony(btn.dataset.pid)
+      } catch (err) {
+        await colonyManager.refresh()
+        _renderColonyList()
+        const el = clList.querySelector(`.cl-error[data-pid="${btn.dataset.pid}"]`)
+        if (el) el.textContent = err.message
+        return
+      }
+      await colonyManager.refresh()
+      _renderColonyList()
+    })
+  })
+
+  clList.querySelectorAll('.cl-save').forEach(box => {
+    box.addEventListener('change', async () => {
+      await fetch('/api/market', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planetId: box.dataset.pid, saveForUpgrade: box.checked }),
+      })
+      await colonyManager.refresh()
     })
   })
 }

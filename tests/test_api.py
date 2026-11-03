@@ -187,3 +187,10 @@ def test_planet_browser_lists_known_planets_only(client, clock):
     assert near['inRange'] and near['cost'] and 'outpostFood' in near
     client.as_player(2)
     assert all(r['id'] != NEAR_ID for r in client.get('/api/planets').get_json()['planets'])
+
+
+def test_colonies_carry_what_the_upgrade_list_needs(client):
+    hw = colonies(client)[HOMEWORLD]
+    assert hw['saveForUpgrade'] is False and hw['starX'] is not None
+    client.patch('/api/market', json={'planetId': HOMEWORLD, 'saveForUpgrade': True})
+    assert colonies(client)[HOMEWORLD]['saveForUpgrade'] is True

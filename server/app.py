@@ -224,6 +224,7 @@ class World_:
                     'ticksRemaining': max(0.0, round(transit - elapsed / TICK_SECONDS, 1))}
         yields = rec['colonyYields']
         hab = planet['habitability']['total'] if planet else 100
+        star = self.galaxy.star_pos(*_colony_star(col))
         d['habitability'] = hab
         ok, _ = can_upgrade_dev(d)
         return {**rec,
@@ -234,6 +235,8 @@ class World_:
                 'netFlowPerTick': net_flow_per_tick(d, yields),
                 'sizeName': size_name(d), 'devName': dev_name(d),
                 'canUpgradeDev': ok, 'upgradeCost': upgrade_cost(d),
+                'saveForUpgrade': col.save_for_upgrade,
+                'starX': star[0] if star else None, 'starY': star[1] if star else None,
                 'isAbandoned': col.status == 'abandoned'}
 
     def spend(self, col: Colony, cost: dict[str, float], what: str = '') -> None:
