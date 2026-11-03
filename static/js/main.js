@@ -162,6 +162,7 @@ function _renderTransitSection(colony) {
   cpColonySection.style.display  = 'none'
   cpYieldsSection.style.display  = 'none'
   cpFoundBtn.style.display       = 'none'
+  cpSourceRow.style.display      = 'none'
   cpTransitSection.style.display = 'block'
 
   const pct = colony.transitProgressPct ?? 0
@@ -178,6 +179,7 @@ function _renderColonySection(colony) {
   cpYieldsSection.style.display  = 'none'
   cpTransitSection.style.display = 'none'
   cpFoundBtn.style.display       = 'none'
+  cpSourceRow.style.display      = 'none'   // left over from founding it here
 
   if (colony.isAbandoned) {
     cpUpgradeBtn.disabled    = true
@@ -190,10 +192,14 @@ function _renderColonySection(colony) {
   const size = colony.size ?? 1
   cpSizeName.textContent = SIZE_NAMES[size - 1] ?? 'Outpost'
   const progress = colony.growthProgress ?? 0
-  const pct = size < 5 ? Math.min(100, (progress / GROWTH_NEEDED) * 100) : 100
+  const cap = Math.min(5, colony.sizeCap ?? 5)
+  const pct = size < cap ? Math.min(100, (progress / GROWTH_NEEDED) * 100) : 100
   cpGrowthFill.style.width = `${pct}%`
-  if (size < 5) {
-    cpGrowthLabel.textContent = `${progress}/${GROWTH_NEEDED}`
+  if (size >= cap && cap < 5) {
+    cpGrowthLabel.textContent = 'max for this world'
+    cpNextSize.textContent    = ''
+  } else if (size < 5) {
+    cpGrowthLabel.textContent = `${Math.min(progress, GROWTH_NEEDED)}/${GROWTH_NEEDED}`
     cpNextSize.textContent    = `→ ${SIZE_NAMES[size] ?? ''}`
   } else {
     cpGrowthLabel.textContent = 'max'
@@ -261,7 +267,7 @@ function _renderColonySection(colony) {
     cpStockpiles.innerHTML = nonZeroStocks.map(([k, v]) =>
       `<div class="cp-stockpile-entry">
         <span class="cp-stockpile-label">${RES_LABELS[k] ?? k}</span>
-        <span class="cp-stockpile-value">${v.toFixed(1)}</span>
+        <span class="cp-stockpile-value">${(Math.floor(v * 10) / 10).toFixed(1)}</span>
       </div>`
     ).join('')
   } else {
@@ -505,8 +511,10 @@ cpUpgradeBtn.addEventListener('click', async () => {
     const col = await colonyManager.upgradeColony(_panelPlanet.id)
     _renderColonySection(col)
   } catch (err) {
-    cpUpgradeBtn.disabled    = false
-    cpStatus.innerHTML = `<span style="color:#cc4444;font-size:10px">${err.message}</span>`
+    await colonyManager.refresh()               // the panel's numbers may be up to 30 s old
+    const col = colonyManager.getColony(_panelPlanet.id)
+    if (col) _renderColonySection(col)
+    cpUpgradeCost.innerHTML += `<br><span style="color:#cc4444">${err.message}</span>`
   }
 })
 

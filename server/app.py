@@ -26,7 +26,7 @@ from generation.chunk_generator import chunks_in_bounds, generate_chunk
 from generation.colony_economics import (
     ALL_RESOURCES, COLONY_SHIP_SPEED_LY_PER_TICK, MIN_DEV_TO_COLONIZE, SIZE_MULT, STARTER_STOCKPILES,
     TICK_SECONDS, apply_upgrade_dev, can_upgrade_dev, colonization_cost, colonization_range,
-    consumption_per_tick, dev_name, extraction_per_tick, net_flow_per_tick, scout_range,
+    consumption_per_tick, dev_name, short_of, extraction_per_tick, net_flow_per_tick, scout_range,
     size_name, upgrade_cost,
 )
 from generation import terraform as tf
@@ -240,7 +240,7 @@ class World_:
         for res, amount in cost.items():
             if have.get(res, 0) < to_fixed(amount):
                 raise HTTPException(400, f'insufficient {res}{what} (need {amount}, '
-                                         f'have {have.get(res, 0) / 1000:.1f})')
+                                         f'have {short_of(have.get(res, 0) / 1000)})')
         for st in col.stockpiles:
             if st.resource in cost:
                 st.amount -= to_fixed(cost[st.resource])
@@ -516,12 +516,12 @@ def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for ever
         for res, amount in setup.items():
             if have.get(res, 0) < to_fixed(amount):
                 raise HTTPException(400, f'insufficient {res} for setup cost (need {amount}, '
-                                         f'have {have.get(res, 0) / 1000:.1f})')
+                                         f'have {short_of(have.get(res, 0) / 1000)})')
         for res, amount in cargo.items():
             after = have.get(res, 0) - to_fixed(setup.get(res, 0))
             if after < to_fixed(amount):
                 raise HTTPException(400, f'insufficient {res} for first leg cargo (need {amount} '
-                                         f'after setup, have {after / 1000:.1f})')
+                                         f'after setup, have {short_of(after / 1000)})')
         w.spend(src, setup)
         w.spend(src, cargo)
         route = Route(id=uuid4().hex[:8], owner_id=w.player.id, name=body.get('name', 'Unnamed Route'),

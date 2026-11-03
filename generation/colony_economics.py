@@ -14,6 +14,7 @@ harsh worlds cost life support and cap the colony's size (terraform.py);
 without it (old saves, the Flask app) neither applies.
 """
 import copy
+import math
 from datetime import datetime, timezone
 
 from .terraform import SHRINK_TICKS, life_support, size_cap
@@ -261,6 +262,12 @@ def pending_ticks(last_ticked_at_iso: str) -> int:
 
 # ── Development upgrade ───────────────────────────────────────────────────────
 
+def short_of(have: float) -> str:
+    """A stock for a 'not enough' message: rounded down, so 99.97 never
+    reads as the 100 it falls short of."""
+    return f'{math.floor(have * 100) / 100:g}'
+
+
 def can_upgrade_dev(colony: dict) -> tuple[bool, str]:
     """Return (True, '') if colony can upgrade, else (False, reason)."""
     dev = colony['developmentLevel']
@@ -269,7 +276,7 @@ def can_upgrade_dev(colony: dict) -> tuple[bool, str]:
     cost = DEV_UPGRADE_COSTS.get(dev, {})
     for resource, amount in cost.items():
         if colony['stockpiles'].get(resource, 0.0) < amount:
-            return False, f'insufficient {resource} (need {amount}, have {colony["stockpiles"].get(resource, 0.0):.1f})'
+            return False, f'insufficient {resource} (need {amount}, have {short_of(colony["stockpiles"].get(resource, 0.0))})'
     return True, ''
 
 

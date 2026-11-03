@@ -74,3 +74,11 @@ def test_colonization_cost_rises_on_hostile_worlds():
     assert ce.colonization_cost(50) == {'metals': 100.0, 'food': 50.0, 'water': 30.0}
     assert ce.colonization_range(2) == 0.0 and ce.colonization_range(3) == 300.0
     assert ce.scout_range(4) == pytest.approx(900.0)
+
+
+def test_shortfall_messages_never_round_up_to_the_need():
+    from generation.colony_economics import can_upgrade_dev, short_of
+    assert short_of(99.968) == '99.96' and short_of(100.0) == '100'
+    ok, why = can_upgrade_dev({'developmentLevel': 2, 'stockpiles': {'minerals': 99.968, 'metals': 60,
+                                                                     'organicFuels': 40}})
+    assert not ok and 'have 99.96' in why
