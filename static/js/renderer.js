@@ -123,6 +123,22 @@ export class Renderer {
       this._drawTransitLine(x1, y1, x2, y2, 'rgba(136,204,255,0.10)')
       this._drawShipSprite(sx, sy, hdg, '#88ccff', '#aaddff')
     }
+
+    // ── Free traders (green; hollow when flying empty to a pickup) ─────────────
+    const traders = this.traderManager?.traders ?? []
+    for (const t of traders) {
+      if (t.status === 'idle' || t.fromWorldX == null || t.toWorldX == null) continue
+      const p   = Math.min(1, (t.progressPct ?? 0) / 100)
+      const wx  = t.fromWorldX + (t.toWorldX - t.fromWorldX) * p
+      const wy  = t.fromWorldY + (t.toWorldY - t.fromWorldY) * p
+      const hdg = Math.atan2(t.toWorldY - t.fromWorldY, t.toWorldX - t.fromWorldX) + Math.PI / 2
+      const { sx: x1, sy: y1 } = this.camera.worldToScreen(t.fromWorldX, t.fromWorldY, canvasW, canvasH)
+      const { sx: x2, sy: y2 } = this.camera.worldToScreen(t.toWorldX,   t.toWorldY,   canvasW, canvasH)
+      const { sx,     sy     } = this.camera.worldToScreen(wx, wy, canvasW, canvasH)
+      this._drawTransitLine(x1, y1, x2, y2, 'rgba(120,220,140,0.10)')
+      const empty = t.status === 'pickup'
+      this._drawShipSprite(sx, sy, hdg, empty ? 'rgba(0,0,0,0)' : '#66dd88', '#aaeebb')
+    }
   }
 
   _drawTransitLine(x1, y1, x2, y2, color) {

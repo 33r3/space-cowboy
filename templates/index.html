@@ -502,6 +502,22 @@
       }
       .cl-zoom-btn:hover { background: rgba(50, 90, 140, 0.7); color: #88ccff; }
       .cl-empty { color: #334455; font-size: 10px; text-align: center; padding: 14px 0; }
+      /* Market + free traders */
+      .mk-table td, .mk-table th { padding: 1px 2px 1px 0; white-space: nowrap; }
+      .mk-table td:nth-child(n+6), .mk-table th:nth-child(n+6) { text-align: center; }
+      .mk-keep {
+        width: 40px; background: rgba(10, 20, 35, 0.9); color: #aaccee;
+        border: 1px solid rgba(80, 120, 180, 0.3); font: inherit; font-size: 10px; padding: 0 2px;
+      }
+      .mk-keep::placeholder { color: #445566; }
+      .mk-table input[type=checkbox] { margin: 0; accent-color: #4488aa; }
+      .mk-incoming { color: #6688aa; font-size: 9px; }
+      .mk-upgrade { display: block; font-size: 10px; margin-top: 6px; color: #88aacc; }
+      #ft-build {
+        width: 100%; margin-top: 4px; padding: 5px; background: rgba(30,60,100,0.5);
+        border: 1px solid rgba(80,120,180,0.4); color: #aaccee; font: inherit; cursor: pointer;
+      }
+      #ft-build:hover { background: rgba(50,90,140,0.7); }
       /* Terraforming section */
       .tf-climate { font-size: 10px; line-height: 1.7; color: #88aacc; margin-bottom: 4px; }
       .tf-delta { color: #556677; }
@@ -594,8 +610,10 @@
           <li><b>Colonize.</b> Scroll in on a known star until its planets show, click one, check its
           <b>habitability</b> (higher = cheaper, bigger colonies; under 45 it needs water and
           metals every tick) and <b>potential yields</b>, then <b>Found Colony</b>.</li>
-          <li><b>Trade (T).</b> With two colonies, a freighter can loop between them:
-          food out to a young colony, metals back.</li>
+          <li><b>Trade (T).</b> With two colonies, build a <b>free trader</b>: it finds its own
+          work, carrying spare goods to whichever colony is short (dearest first). Each colony's
+          <b>Market</b> section shows its prices and lets you set what it keeps, or stop goods
+          leaving or arriving. Fixed routes are still there for exact loops.</li>
           <li><b>Upgrade.</b> The button in a colony's panel. Higher development means longer
           range, bigger freighters and faster terraforming.</li>
           <li><b>Terraform.</b> Bottom of a planet's panel, from Advanced colonies: push its
@@ -609,11 +627,11 @@
         development level; at the lowest level it's abandoned (your homeworld never is).</p>
 
         <h3>A good first session</h3>
-        <p>Scout two or three nearby stars, settle the best world in reach, set up a food or
-        water route to it, and come back in a few hours to upgrade.</p>
+        <p>Scout two or three nearby stars, settle the best world in reach, build a free
+        trader to keep it supplied, and come back in a few hours to upgrade.</p>
 
         <h3>Keys</h3>
-        <p>drag pan · scroll zoom · <b>R</b> back home · <b>L</b> colonies · <b>T</b> trade routes ·
+        <p>drag pan · scroll zoom · <b>R</b> back home · <b>L</b> colonies · <b>T</b> trade ·
         <b>N</b> notifications · <b>?</b> this help</p>
       </div>
     </div>
@@ -629,7 +647,7 @@
       <div><span style="color:#44ffcc">○</span> — surveyed (planets known)</div>
       <div>` — debug overlay</div>
       <div>R — back home</div>
-      <div>T — trade routes</div>
+      <div>T — trade</div>
       <div>L — colony list</div>
       <div>N — notifications</div>
       <div>? — how to play</div>
@@ -714,6 +732,7 @@
       </div>
       <button id="colony-panel-found" style="display:none">Found Colony</button>
 
+      <div id="colony-panel-market"></div>
       <div id="colony-panel-terraform"></div>
     </div>
 
@@ -740,10 +759,15 @@
     <!-- Routes panel -->
     <div id="routes-panel">
       <div class="rp-header">
-        <span>TRADE ROUTES</span>
+        <span>TRADE</span>
         <button id="rp-close">✕</button>
       </div>
 
+      <div class="rp-builder-label">Free traders</div>
+      <div id="ft-list"></div>
+      <div id="ft-form"></div>
+      <hr class="cp-divider">
+      <div class="rp-builder-label">Fixed routes</div>
       <div id="rp-route-list"></div>
       <button id="rp-new-btn">+ New Route</button>
 

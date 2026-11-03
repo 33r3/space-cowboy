@@ -53,6 +53,7 @@ class Colony(Base):
     starvation_ticks: Mapped[int]  = mapped_column(Integer, default=0)
     is_homeworld:     Mapped[bool] = mapped_column(Boolean, default=False)
     over_cap_ticks:   Mapped[int]  = mapped_column(Integer, default=0, server_default='0')
+    save_for_upgrade: Mapped[bool] = mapped_column(Boolean, default=False, server_default='0')
 
     stockpiles: Mapped[list['Stockpile']] = relationship(
         back_populates='colony', cascade='all, delete-orphan')
@@ -74,14 +75,29 @@ class Ship(Base):
     id:             Mapped[int]       = mapped_column(Integer, primary_key=True)
     uid:            Mapped[str]       = mapped_column(String(36), unique=True)  # API id
     owner_id:       Mapped[int]       = mapped_column(ForeignKey('players.id'), index=True)
-    kind:           Mapped[str]       = mapped_column(String(16))   # colony_ship | scout | freighter
-    status:         Mapped[str]       = mapped_column(String(16))   # in_transit | arrived
+    kind:           Mapped[str]       = mapped_column(String(16))   # colony_ship | scout | freighter | trader
+    status:         Mapped[str]       = mapped_column(String(16))   # in_transit | arrived | idle (traders)
     from_colony_id: Mapped[int | None] = mapped_column(ForeignKey('colonies.id'))
     to_colony_id:   Mapped[int | None] = mapped_column(ForeignKey('colonies.id'))
     to_star_id:     Mapped[str | None] = mapped_column(String(64))
     departed_tick:  Mapped[int]       = mapped_column(Integer)
     arrival_tick:   Mapped[int]       = mapped_column(Integer)
     cargo:          Mapped[dict]      = mapped_column(JSON, default=dict)
+    ship_class:     Mapped[str | None] = mapped_column(String(32))   # traders
+    # traders: {'phase': 'pickup' | 'deliver', 'want': {...}, 'then': colony id,
+    #           'retire': bool, 'trips': n, 'value': credits, 'last': {...}}
+    trade:          Mapped[dict | None] = mapped_column(JSON)
+
+
+class MarketSetting(Base):
+    """An owner's override of one resource's market at one colony
+    (generation/market.py; no row = automatic)."""
+    __tablename__ = 'market_settings'
+    colony_id: Mapped[int]        = mapped_column(ForeignKey('colonies.id'), primary_key=True)
+    resource:  Mapped[str]        = mapped_column(String(32), primary_key=True)
+    keep:      Mapped[int | None] = mapped_column(Integer)                  # thousandths; None = auto
+    export:    Mapped[bool]       = mapped_column(Boolean, default=True)
+    import_:   Mapped[bool]       = mapped_column('import', Boolean, default=True)
 
 
 class Route(Base):

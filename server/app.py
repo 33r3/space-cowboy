@@ -41,9 +41,11 @@ from generation.trade_routes import (
 from .db import make_engine, make_sessionmaker
 from .galaxy import Galaxy, split_planet_id, split_star_id
 from .importer import homeworld_overrides
-from .models import (Colony, Event, Notification, Planet, Player, Route, RouteLeg, Ship,
-                     Stockpile, TerraformProject, World)
+from .models import (Colony, Event, MarketSetting, Notification, Planet, Player, Route,
+                     RouteLeg, Ship, Stockpile, TerraformProject, World)
 from .ticker import advance, colony_dict, stockpiles
+from .trade import OwnerMarkets, settings_of
+from generation import market as mk
 from .vision import Vision
 from .units import fixed_map, float_map, now_tick, time_of, to_fixed
 
@@ -546,6 +548,143 @@ def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for ever
         for n in w.s.scalars(select(Notification).where(Notification.route_id == r.id)):
             n.read = True
         return {'ok': True}
+
+    # ── Markets and free traders ───────────────────────────────────────────────
+
+    def _active_colony(w: World_, planet_id: str) -> Colony:
+        col = _owned(w.s, w.player, planet_id)
+        if col is None:
+            raise HTTPException(404, 'colony not found')
+        if col.status != 'active':
+            raise HTTPException(400, 'colony is not active')
+        return col
+
+    def _market_json(w: World_, col: Colony) -> dict:
+        view = OwnerMarkets(w.s, galaxy, w.player.id)
+        m = view.markets[col.id]                    # with traders under way counted
+        have = float_map(stockpiles(col))
+        settings = settings_of(w.s, [col.id]).get(col.id, {})
+        d = colony_dict(col)
+        state = galaxy.state(col.planet_id, (w.s.get(Planet, col.planet_id).overrides
+                                             if w.s.get(Planet, col.planet_id) else None))
+        if state:
+            d['habitability'] = state[1]
+        auto = mk.auto_targets(d, col.save_for_upgrade)
+        rows = []
+        for r in ALL_RESOURCES:
+            st = settings.get(r, {})
+            rows.append({'resource': r, 'stock': have.get(r, 0.0),
+                         'incoming': round(m.stock.get(r, 0.0) - have.get(r, 0.0), 3),
+                         'target': m.target[r], 'autoTarget': auto[r], 'keep': st.get('keep'),
+                         'export': st.get('export', True), 'import': st.get('import', True),
+                         'price': round(m.price(r), 2), 'basePrice': mk.BASE_PRICE[r],
+                         'surplus': round(m.surplus(r), 3), 'shortfall': round(m.shortfall(r), 3)})
+        return {'planetId': col.planet_id, 'saveForUpgrade': col.save_for_upgrade,
+                'reserveTicks': mk.RESERVE_TICKS, 'resources': rows}
+
+    @api.get('/api/market')
+    def api_market_get(planetId: str = '', w: World_ = W):
+        return _market_json(w, _active_colony(w, planetId))
+
+    @api.patch('/api/market')
+    def api_market_patch(body: dict = Body(default={}), w: World_ = W):
+        """{planetId, saveForUpgrade?, resources?: {res: {keep: n | null, export, import}}}"""
+        col = _active_colony(w, body.get('planetId', ''))
+        if 'saveForUpgrade' in body:
+            col.save_for_upgrade = bool(body['saveForUpgrade'])
+        for r, st in (body.get('resources') or {}).items():
+            if r not in ALL_RESOURCES or not isinstance(st, dict):
+                raise HTTPException(400, f'unknown resource: {r!r}')
+            row = w.s.get(MarketSetting, (col.id, r)) or MarketSetting(colony_id=col.id, resource=r,
+                                                                         export=True, import_=True)
+            if 'keep' in st:
+                keep = st['keep']
+                if keep is not None:
+                    try:
+                        keep = float(keep)
+                    except (TypeError, ValueError):
+                        raise HTTPException(400, f'{r}: keep must be a number or null')
+                    if not math.isfinite(keep) or keep < 0:
+                        raise HTTPException(400, f'{r}: keep must be 0 or more')
+                row.keep = None if keep is None else to_fixed(keep)
+            if 'export' in st:
+                row.export = bool(st['export'])
+            if 'import' in st:
+                row.import_ = bool(st['import'])
+            if row.keep is None and row.export and row.import_:
+                if row in w.s:
+                    w.s.delete(row)                 # back to automatic
+            else:
+                w.s.add(row)
+        w.s.flush()
+        return _market_json(w, col)
+
+    def _trader_json(w: World_, sh: Ship) -> dict:
+        sc = SHIP_CLASSES.get(sh.ship_class, {})
+        t = sh.trade or {}
+        here = w.s.get(Colony, sh.to_colony_id)
+        out = {'traderId': sh.uid, 'shipClass': sh.ship_class, 'shipName': sc.get('name'),
+               'capacity': sc.get('capacity'), 'rangeLy': sc.get('maxRangeLy'),
+               'status': 'idle' if sh.status == 'idle' else t.get('phase', 'deliver'),
+               'retiring': bool(t.get('retire')), 'trips': t.get('trips', 0),
+               'valueMoved': t.get('value', 0.0), 'last': t.get('last'),
+               'cargo': float_map(sh.cargo or {}), 'want': t.get('want'),
+               'atName': here.name if here and sh.status == 'idle' else None}
+        if sh.status == 'in_transit':
+            src = w.s.get(Colony, sh.from_colony_id)
+            then = w.s.get(Colony, t['then']) if t.get('then') else None
+            fp = galaxy.star_pos(*_colony_star(src)) if src else None
+            tp = galaxy.star_pos(*_colony_star(here)) if here else None
+            transit = sh.arrival_tick - sh.departed_tick
+            elapsed = (_now() - time_of(sh.departed_tick)).total_seconds() / TICK_SECONDS
+            out.update({'fromName': src.name if src else None, 'toName': here.name if here else None,
+                        'thenName': then.name if then else None,
+                        'transitTicks': transit, 'elapsedTicks': round(elapsed, 2),
+                        'progressPct': round(min(100.0, elapsed / max(1, transit) * 100), 1),
+                        'fromWorldX': fp[0] if fp else None, 'fromWorldY': fp[1] if fp else None,
+                        'toWorldX': tp[0] if tp else None, 'toWorldY': tp[1] if tp else None})
+        return out
+
+    @api.get('/api/traders')
+    def api_traders_get(w: World_ = W):
+        ships = w.s.scalars(select(Ship).where(Ship.owner_id == w.player.id, Ship.kind == 'trader')
+                            .order_by(Ship.id)).all()
+        return {'traders': [_trader_json(w, sh) for sh in ships]}
+
+    @api.post('/api/traders', status_code=201)
+    def api_traders_post(body: dict = Body(default={}), w: World_ = W):
+        """Build a free trader at a colony: {planetId, shipClass}. It costs
+        what a route's freighter does and starts work next tick."""
+        col = _active_colony(w, body.get('planetId', ''))
+        ship_class = body.get('shipClass', '')
+        if ship_class not in SHIP_CLASSES:
+            raise HTTPException(400, f'unknown ship class: {ship_class}')
+        sc = SHIP_CLASSES[ship_class]
+        if col.dev_level < sc['devRequired']:
+            raise HTTPException(403, f'{sc["name"]} requires dev level {sc["devRequired"]}; '
+                                     f'{col.name} is dev {col.dev_level}')
+        w.spend(col, sc['setupCost'], ' for the ship')
+        tick = w.s.get(World, 1).last_tick
+        sh = Ship(uid=str(uuid4()), owner_id=w.player.id, kind='trader', status='idle',
+                  to_colony_id=col.id, departed_tick=tick, arrival_tick=tick, cargo={},
+                  ship_class=ship_class, trade={})
+        w.s.add(sh)
+        w.s.flush()
+        return {'trader': _trader_json(w, sh)}
+
+    @api.delete('/api/traders/{trader_id}')
+    def api_traders_delete(trader_id: str, w: World_ = W):
+        """Scrap a trader: at once if idle, else after it finishes the
+        trip it's on (its cargo is delivered, not lost)."""
+        sh = w.s.scalars(select(Ship).where(Ship.uid == trader_id, Ship.kind == 'trader',
+                                            Ship.owner_id == w.player.id)).one_or_none()
+        if sh is None:
+            raise HTTPException(404, 'trader not found')
+        if sh.status == 'idle':
+            w.s.delete(sh)
+            return {'ok': True, 'scrapped': True}
+        sh.trade = {**(sh.trade or {}), 'retire': True}
+        return {'ok': True, 'scrapped': False}
 
     # ── Terraforming ───────────────────────────────────────────────────────────
 

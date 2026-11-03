@@ -5,7 +5,9 @@ For each tick, in order:
      land, scouts arrive, freighters unload and set off on the next leg);
   2. terraforming projects, oldest first, each paid by its colony;
   3. the economy, one tick for every active colony, on the planets as
-     terraforming just left them.
+     terraforming just left them;
+  4. free traders: every idle one takes the best job its owner's markets
+     offer now (server/trade.py).
 
 Everything players see happened in that order, whoever looks first.
 """
@@ -20,6 +22,7 @@ from .galaxy import Galaxy, split_star_id
 from .models import (Colony, Event, Notification, Planet, Route, Ship, Stockpile,
                      TerraformProject, World)
 from .units import fixed_map, float_map, to_fixed
+from .trade import run_traders
 
 
 # ── Colony rows <-> the economy's dicts ───────────────────────────────────────
@@ -66,6 +69,9 @@ def _ship_arrives(session: Session, galaxy: Galaxy, ship: Ship, tick: int) -> No
                 f'{len(new)} system{"s" if len(new) != 1 else ""} surveyed.')
     elif ship.kind == 'freighter':
         _freighter_arrives(session, galaxy, ship, tick)
+    elif ship.kind == 'trader':
+        from .trade import trader_arrives
+        trader_arrives(session, galaxy, ship, tick)
 
 
 def _star_of(col: Colony) -> tuple[int, int, int]:
@@ -132,7 +138,13 @@ def _stall(session, route: Route, col: Colony | None, tick: int) -> None:
             route_id=route.id)
 
 
-HANDLERS = {'ship_arrives': lambda s, g, e, t: _ship_arrives(s, g, s.get(Ship, e.ref_id), t)}
+def _arrival(s, g, e, t):
+    ship = s.get(Ship, e.ref_id)
+    if ship is not None:                     # a scrapped trader
+        _ship_arrives(s, g, ship, t)
+
+
+HANDLERS = {'ship_arrives': _arrival}
 
 
 def run_events(session: Session, galaxy: Galaxy, tick: int) -> int:
@@ -261,6 +273,7 @@ def advance(session: Session, galaxy: Galaxy, to_tick: int) -> int:
         run_events(session, galaxy, world.last_tick)
         run_terraforming(session, galaxy, world.last_tick)
         run_economy(session, galaxy)
+        run_traders(session, galaxy, world.last_tick)
         session.flush()
         ran += 1
     return ran

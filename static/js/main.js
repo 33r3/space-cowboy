@@ -7,6 +7,8 @@ import { ColonyManager } from './colony_manager.js'
 import { RouteManager } from './route_manager.js'
 import { ScoutManager } from './scout_manager.js'
 import { renderTerraform } from './terraform_panel.js'
+import { renderMarket } from './market_panel.js'
+import { TraderManager, renderTraderForm, renderTraderList } from './trader_manager.js'
 import { Notifications } from './notifications.js'
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -44,6 +46,9 @@ colonyManager.init().then(() => {
 const routeManager = new RouteManager()
 routeManager.init()
 
+const traderManager = new TraderManager()
+traderManager.init()
+
 // ── Scout manager ─────────────────────────────────────────────────────────────
 
 const scoutManager = new ScoutManager()
@@ -54,6 +59,7 @@ scoutManager.init().then(() => {
 // ── Renderer & input ──────────────────────────────────────────────────────────
 
 const renderer = new Renderer(ctx, camera, galaxyClient, colonyManager, routeManager)
+renderer.traderManager = traderManager
 const input    = new InputHandler(canvas, camera, viewport)
 
 input.onDebugToggle  = () => { renderer.showDebug = !renderer.showDebug }
@@ -117,6 +123,7 @@ const cpUpgradeBtn       = document.getElementById('colony-panel-upgrade-btn')
 const cpUpgradeCost      = document.getElementById('cp-upgrade-cost')
 const cpHabLine          = document.getElementById('cp-hab-line')
 const cpTerraform        = document.getElementById('colony-panel-terraform')
+const cpMarket           = document.getElementById('colony-panel-market')
 const cpFlowsBody        = document.getElementById('cp-flows-body')
 const cpStockpiles       = document.getElementById('cp-stockpiles')
 const cpTransitSection   = document.getElementById('colony-panel-transit-section')
@@ -384,6 +391,8 @@ function openColonyPanel(planet, system) {
   }
 
   colonyPanel.style.display = 'block'
+  cpMarket.innerHTML = ''
+  if (colonyManager.isActiveColony(planet.id) && (isHW || isColony)) renderMarket(cpMarket, planet.id)
   renderTerraform(cpTerraform, planet.id, () => colonyManager.refresh())
 }
 
@@ -700,7 +709,7 @@ const ALL_RESOURCES = [
 function _renderRouteList() {
   const routes = routeManager.routes
   if (!routes.length) {
-    rpRouteList.innerHTML = '<div class="rp-empty">No trade routes. Click + New Route to begin.</div>'
+    rpRouteList.innerHTML = '<div class="rp-empty">No fixed routes. Click + New Route for an exact loop.</div>'
     return
   }
   rpRouteList.innerHTML = routes.map(r => {
@@ -1030,9 +1039,19 @@ rpSubmit?.addEventListener('click', async () => {
 
 rpCancel?.addEventListener('click', _closeBuilder)
 
+const ftList = document.getElementById('ft-list')
+const ftForm = document.getElementById('ft-form')
+traderManager.onUpdate = () => {
+  if (routesPanel && routesPanel.style.display !== 'none') renderTraderList(ftList, traderManager)
+}
+
 function openRoutesPanel() {
   if (!routesPanel) return
   closeColonyListPanel()
+  renderTraderList(ftList, traderManager)
+  renderTraderForm(ftForm, traderManager,
+    colonyManager.colonies.filter(c => colonyManager.isActiveColony(c.planetId)),
+    id => routeManager.getShipsForColony(id))
   _renderRouteList()
   routesPanel.style.display = 'block'
 }
