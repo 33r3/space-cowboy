@@ -215,3 +215,41 @@ def test_traders_are_their_owners(client, clock):
     client.as_player(1)
     assert client.delete(f'/api/traders/{tid}').get_json()['scrapped'] is True   # idle: at once
     assert client.get('/api/traders').get_json() == {'traders': []}
+
+
+# ── Outlook ───────────────────────────────────────────────────────────────────
+
+from generation import outlook as ol                       # noqa: E402
+
+
+def test_outlook_states():
+    assert ol.state(1.0, 2.0, 50) == ('ok', None)
+    assert ol.state(0.1, 2.0, 50) == ('tight', None)          # grows by under 10% of use
+    assert ol.state(0.0, 0.0, 0) == ('ok', None)              # nothing uses it
+    assert ol.state(-0.5, 2.0, 100) == ('falling', 200)
+    assert ol.state(-1.0, 2.0, 30) == ('critical', 30)
+    rows = ol.resource_rows({'food': 30, 'water': 100}, {'food': 1, 'water': 1}, {'food': 2, 'water': 0.95})
+    assert ol.worst(rows)['resource'] == 'food'
+    assert ol.room_for_outposts([{'resource': r, 'net': 1.0} for r in ('food', 'water')]) == \
+        {'food': 4, 'water': 4}                                # an outpost eats 0.25 of each
+
+
+def test_outlook_api(client, clock):
+    from conftest import NEAR, NEAR_STAR
+    from test_api import colonize
+    client.survey(NEAR_STAR)
+    q = '&'.join(f'{k}={v}' for k, v in NEAR.items())
+    pre = client.get(f'/api/colonization-preview?{q}').get_json()
+    assert pre['eligible'] and pre['asOutpost']['food'] < 0.5      # an outpost's whole net
+    assert colonize(client).status_code == 201
+    o = client.get('/api/outlook').get_json()
+    assert o['civ']['colonies'] == 1 and len(o['civ']['landing']) == 1
+    assert o['civ']['afterLanding'] is not None
+    clock.advance(minutes=4)
+    o = client.get('/api/outlook').get_json()
+    assert o['civ']['colonies'] == 2 and o['civ']['afterLanding'] is None
+    food = next(r for r in o['civ']['resources'] if r['resource'] == 'food')
+    cols = o['colonies']
+    assert food['made'] == pytest.approx(sum(
+        next(r['made'] for r in c['resources'] if r['resource'] == 'food') for c in cols))
+    assert set(o['civ']['roomForOutposts']) == {'food', 'water'}

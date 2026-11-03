@@ -126,6 +126,9 @@ export class InputHandler {
       if (e.key.toLowerCase() === 'n') {
         this.onNotesToggle?.()
       }
+      if (e.key.toLowerCase() === 'e') {
+        this.onOutlookToggle?.()
+      }
       if (e.key === '?') {
         this.onHelpToggle?.()
       }

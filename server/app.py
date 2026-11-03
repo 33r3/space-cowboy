@@ -46,6 +46,7 @@ from .models import (Colony, Event, MarketSetting, Notification, Planet, Player,
 from .ticker import advance, colony_dict, stockpiles
 from .trade import OwnerMarkets, settings_of
 from generation import market as mk
+from generation import outlook as ol
 from .vision import Vision
 from .units import fixed_map, float_map, now_tick, time_of, to_fixed
 
@@ -351,7 +352,10 @@ def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for ever
         if not sources:
             return {'eligible': False,
                     'reason': f'no Advanced (dev {MIN_DEV_TO_COLONIZE}+) colony within range'}
-        return {'eligible': True, 'cost': cost, 'sources': [{
+        outpost = ol.outpost(planet['colonyYields'], planet['habitability']['total'])
+        return {'eligible': True, 'cost': cost,
+                'asOutpost': {r: round(v, 3) for r, v in outpost.items() if v},
+                'sources': [{
             'planetId': col.planet_id, 'name': col.name, 'devName': dev_name(colony_dict(col)),
             'distance': round(dist, 1), 'maxRange': colonization_range(col.dev_level),
             'transitTicks': max(1, math.ceil(dist / COLONY_SHIP_SPEED_LY_PER_TICK)),
@@ -685,6 +689,79 @@ def _routes(api: FastAPI, game: Game) -> None:  # noqa: C901 (one place for ever
             return {'ok': True, 'scrapped': True}
         sh.trade = {**(sh.trade or {}), 'retire': True}
         return {'ok': True, 'scrapped': False}
+
+    # ── Outlook ────────────────────────────────────────────────────────────────
+
+    def _cargo_under_way(w: World_) -> tuple[dict[int, dict[str, float]], dict[str, float]]:
+        """Goods aboard the caller's freighters and traders: by the colony
+        they're heading to (deliveries only), and in all."""
+        to: dict[int, dict[str, float]] = {}
+        total: dict[str, float] = {}
+        for sh in w.s.scalars(select(Ship).where(Ship.owner_id == w.player.id,
+                                                 Ship.kind.in_(('freighter', 'trader')),
+                                                 Ship.status == 'in_transit')):
+            for r, amt in float_map(sh.cargo or {}).items():
+                total[r] = total.get(r, 0.0) + amt
+                if sh.to_colony_id is not None:
+                    d = to.setdefault(sh.to_colony_id, {})
+                    d[r] = d.get(r, 0.0) + amt
+        return to, total
+
+    @api.get('/api/outlook')
+    def api_outlook(w: World_ = W):
+        """Each colony's and the whole civilization's resources at today's
+        rates: net per tick, runway, state (generation/outlook.py)."""
+        incoming, aboard = _cargo_under_way(w)
+        civ_stock, civ_made, civ_used = dict(aboard), {}, {}
+        landing_net: dict[str, float] = {}
+        landing_used: dict[str, float] = {}
+        cols, landing = [], []
+        for col in w.colonies():
+            if col.status == 'abandoned':
+                continue
+            if col.status == 'in_transit':
+                planet = w.planet(col.planet_id)
+                if planet:
+                    net = ol.outpost(planet['colonyYields'], planet['habitability']['total'])
+                    for r, v in net.items():
+                        landing_net[r] = landing_net.get(r, 0.0) + v
+                    for r, v in ol.outpost_use(planet['habitability']['total']).items():
+                        landing_used[r] = landing_used.get(r, 0.0) + v
+                    landing.append({'planetId': col.planet_id, 'name': col.name,
+                                    'net': {r: round(v, 3) for r, v in net.items() if v}})
+                continue
+            e = w.enrich(col)
+            for r in ALL_RESOURCES:
+                civ_stock[r] = civ_stock.get(r, 0.0) + e['stockpiles'].get(r, 0.0)
+                civ_made[r] = civ_made.get(r, 0.0) + e['extractionPerTick'].get(r, 0.0)
+                civ_used[r] = civ_used.get(r, 0.0) + e['consumptionPerTick'].get(r, 0.0)
+            rows = ol.resource_rows(e['stockpiles'], e['extractionPerTick'],
+                                    e['consumptionPerTick'], incoming.get(col.id))
+            cols.append({'planetId': col.planet_id, 'name': col.name,
+                         'isHomeworld': col.is_homeworld, 'sizeName': e['sizeName'],
+                         'devName': e['devName'], 'starving': col.starvation_ticks > 0,
+                         'starvationTicks': col.starvation_ticks,
+                         'resources': rows, 'worst': ol.worst(rows)})
+        civ = ol.resource_rows(civ_stock, civ_made, civ_used)
+        after = []                      # once the colony ships under way have landed
+        for row in civ:
+            net = round(row['net'] + landing_net.get(row['resource'], 0.0), 3)
+            used = row['used'] + landing_used.get(row['resource'], 0.0)
+            st, runway = ol.state(net, used, row['stock'])
+            after.append({'resource': row['resource'], 'net': net, 'state': st,
+                          'runwayTicks': None if runway is None else round(runway, 1)})
+        cols.sort(key=lambda c: (-ol.ORDER[c['worst']['state']] if c['worst'] else 0,
+                                 (c['worst'] or {}).get('runwayTicks') or math.inf, c['name']))
+        traders = len(w.s.scalars(select(Ship.id).where(Ship.owner_id == w.player.id,
+                                                        Ship.kind == 'trader')).all())
+        return {'tick': w.s.get(World, 1).last_tick, 'traders': traders,
+                'tightShare': ol.TIGHT_SHARE, 'criticalTicks': ol.CRITICAL_TICKS,
+                'civ': {'resources': civ, 'worst': ol.worst(civ),
+                        'colonies': len(cols), 'starving': sum(c['starving'] for c in cols),
+                        'roomForOutposts': ol.room_for_outposts(civ),
+                        'outpostUse': ol.outpost_use(),
+                        'landing': landing, 'afterLanding': after if landing else None},
+                'colonies': cols}
 
     # ── Terraforming ───────────────────────────────────────────────────────────
 

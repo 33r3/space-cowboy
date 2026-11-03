@@ -79,3 +79,28 @@ traders when their markets change, and vectorize the pair search.
 - ship upkeep or fuel for traders
 - auto-upgrade when a saving colony reaches its cost
 - a "where's everything going" overview of the whole empire's market
+
+# Outlook (2026-11-02)
+
+The Outlook panel (E) projects at today's rates (`/api/outlook`,
+generation/outlook.py). Each resource is in one of four states:
+
+- **ok**: growing
+- **tight**: growing, but by less than 10% of what is used, so one more
+  colony or one bad turn tips it over
+- **falling**: shrinking, shown as the time until the stock runs out
+- **critical**: shrinking and gone within an hour
+
+Only resources that something uses can be tight, falling or critical.
+
+- **Civilization:** stocks, including goods aboard ships, and production,
+  use and net across all active colonies. Colony ships under way add a
+  **landed** column: the net once they arrive as outposts.
+- **Room for outposts:** the net surplus divided by what a new outpost eats
+  (0.25 food and 0.25 water per tick on a world that makes neither).
+- **Colonies:** sorted most at risk first. Each shows every resource that
+  isn't ok, with goods on the way and whether the rest of the empire can
+  cover it: has spare (with a note when no trader or route will move it),
+  barely covers it, or is short too.
+- **Colonization preview:** shows the outpost's own net for food and water,
+  and the empire's net before and after.

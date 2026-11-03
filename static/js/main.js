@@ -9,6 +9,7 @@ import { ScoutManager } from './scout_manager.js'
 import { renderTerraform } from './terraform_panel.js'
 import { renderMarket } from './market_panel.js'
 import { TraderManager, renderTraderForm, renderTraderList } from './trader_manager.js'
+import { OutlookPanel, outpostLine } from './outlook_panel.js'
 import { Notifications } from './notifications.js'
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
@@ -86,6 +87,13 @@ const notifications = new Notifications(
   document.getElementById('notes-panel'), document.getElementById('notes-list'),
   document.getElementById('notes-badge'))
 input.onNotesToggle = () => notifications.toggle()
+
+const outlook = new OutlookPanel(document.getElementById('outlook-panel'))
+input.onOutlookToggle = () => {
+  if (!outlook.open) { closeRoutesPanel(); closeColonyListPanel() }
+  outlook.toggle()
+}
+document.getElementById('outlook-btn')?.addEventListener('click', () => input.onOutlookToggle())
 
 // How to play: ? toggles it; shown once on a first visit
 const helpOverlay = document.getElementById('help-overlay')
@@ -341,6 +349,12 @@ function _renderYieldsSection(planet, meta) {
           `<span style="color:${src.canAfford ? '#66cc88' : '#cc4444'}">${src.canAfford ? 'affordable' : 'INSUFFICIENT FUNDS'}</span></div>`
         cpFoundBtn.disabled    = !src.canAfford
         cpFoundBtn.textContent = 'Found Colony'
+        if (preview.asOutpost) {
+          const line = document.createElement('div')
+          line.className = 'ol-outpost'
+          cpStatus.appendChild(line)
+          outpostLine(preview.asOutpost).then(html => { line.innerHTML = html })
+        }
       }
 
       _applySelection()
@@ -674,6 +688,7 @@ function _renderColonyList() {
 function openColonyListPanel() {
   if (!colonyListPanel) return
   closeRoutesPanel()
+  outlook.hide()
   _renderColonyList()
   colonyListPanel.style.display = 'block'
 }
@@ -1048,6 +1063,7 @@ traderManager.onUpdate = () => {
 function openRoutesPanel() {
   if (!routesPanel) return
   closeColonyListPanel()
+  outlook.hide()
   renderTraderList(ftList, traderManager)
   renderTraderForm(ftForm, traderManager,
     colonyManager.colonies.filter(c => colonyManager.isActiveColony(c.planetId)),
